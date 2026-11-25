@@ -126,7 +126,7 @@
   .screen #powerLabel { font-family: var(--jua); font-size: 22px; line-height: 1.2; color: var(--butter); }
   .screen #powerLabel.idle { font-family: inherit; font-size: 13px; color: #d9cfe8; }
   .gauge { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
-  .gauge i { height: 16px; border-radius: 5px; background: rgba(255, 255, 255, .14); transition: background .06s; }
+  .gauge i { height: 16px; border-radius: 5px; background: rgba(255, 255, 255, .14); }
   .gauge i.on:nth-child(1) { background: #7fe0a0; }
   .gauge i.on:nth-child(2) { background: #c2e86a; }
   .gauge i.on:nth-child(3) { background: var(--butter); }
@@ -296,6 +296,11 @@
         <button data-theme="field" aria-pressed="true">운동회</button>
         <button data-theme="snail" aria-pressed="false">달팽이</button>
         <button data-theme="plane" aria-pressed="false">종이비행기</button>
+      </div>
+      <h3>누구를 뽑을까요</h3>
+      <div class="seg" role="group" aria-label="뽑는 쪽">
+        <button data-pick="first" aria-pressed="true">먼저 들어온 사람</button>
+        <button data-pick="last" aria-pressed="false">늦게 들어온 사람</button>
       </div>
     </div>
 
@@ -486,7 +491,7 @@ function pickTarget() {
 function showGauge(n, label) {
   els.cells.forEach((c, i) => c.classList.toggle('on', i < n));
   els.powerLabel.classList.toggle('idle', !label);
-  els.powerLabel.textContent = label || (game === 'race' ? '먼저 들어온 차례대로 뽑혀요' : '집게 힘은 도전마다 새로 정해져요');
+  els.powerLabel.textContent = label || (game !== 'race' ? '집게 힘은 도전마다 새로 정해져요' : race.pick === 'last' ? '늦게 들어온 차례대로 뽑혀요' : '먼저 들어온 차례대로 뽑혀요');
 }
 
 // 한 판에 여러 명: 뽑힌 캡슐은 판이 끝날 때까지 기계 밖에 두어 같은 사람이 두 번 나오지 않게 한다
@@ -1073,7 +1078,7 @@ function save() {
   localStorage.setItem('claw.v2', JSON.stringify({
     mode, from: els.from.value, to: els.to.value, skip: els.skip.value, names: els.names.value,
     luck, remove: els.removeWinner.checked, sound: els.soundOn.checked, bgm: els.bgmOn.checked, pickN: pickCount(),
-    game, theme: typeof race !== 'undefined' ? race.theme : undefined,
+    game, theme: typeof race !== 'undefined' ? race.theme : undefined, pick: typeof race !== 'undefined' ? race.pick : undefined,
   }));
 }
 function setMode(m) {

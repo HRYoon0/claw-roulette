@@ -41,6 +41,7 @@ const RACE_THEMES = {
 
 const race = {
   theme: 'field', state: 'idle',   // idle 기다림, run 달리는 중, result 결과 공개 중
+  pick: 'first',                   // first 먼저 들어온 사람, last 늦게 들어온 사람을 뽑는다
   runners: [], src: null, lay: null, clock: 0, log: [], leader: null,
   leadSndAt: -9, skillSndAt: -9, rolled: false, went: false,
 };
@@ -67,13 +68,19 @@ function rPlan() {
   shuffle([...rs.keys()]).forEach((ri, rank) => { rs[ri].rank = rank; });
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const bad = sk.filter(s => s.kind !== 'dash'), good = sk.filter(s => s.kind === 'dash');
+  const n = rs.length, last = race.pick === 'last';
   for (const r of rs) {
     let ev;
-    if (r.rank === 0) {        // 1등: 초반에 손해, 막판에 질주 → 역전
+    if (!last && r.rank === 0) {        // 1등: 초반에 손해, 막판에 질주 → 역전
       ev = [{ at: 3 + Math.random() * 4, s: pick(bad) }, { at: 9 + Math.random() * 2, s: pick(sk) },
             { at: 13.5 + Math.random() * 1.5, s: pick(good) }];
-    } else if (r.rank === 1) { // 2등도 막판에 따라붙어 사진 판정처럼
+    } else if (!last && r.rank === 1) { // 2등도 막판에 따라붙어 사진 판정처럼
       ev = [{ at: 2 + Math.random() * 8, s: pick(sk) }, { at: 14 + Math.random() * 1.5, s: pick(good) }];
+    } else if (last && r.rank === n - 1) {   // 꼴찌: 초반에 앞서가다 막판에 넘어지거나 낮잠
+      ev = [{ at: 2 + Math.random() * 3, s: pick(good) }, { at: 8 + Math.random() * 2, s: pick(sk) },
+            { at: 13 + Math.random() * 2, s: pick(bad) }];
+    } else if (last && r.rank === n - 2) {   // 끝에서 둘째도 막판에 붙잡혀 아슬아슬하게
+      ev = [{ at: 2 + Math.random() * 8, s: pick(sk) }, { at: 13.5 + Math.random() * 2, s: pick(bad) }];
     } else {
       ev = Array.from({ length: 2 + Math.floor(Math.random() * 2) }, () => ({ at: 1.5 + Math.random() * 14, s: pick(sk) }));
     }
@@ -119,16 +126,20 @@ function raceStart() {
   updateUI();
 }
 
-function rWinners() {
-  return [...race.runners].sort((a, b) => a.rank - b.rank).slice(0, round.total).map(r => r.b);
+// 뽑히는 주자(뽑히는 차례대로): 먼저 들어온 쪽이면 1등부터, 늦게 들어온 쪽이면 꼴찌부터
+function rPicked() {
+  const rs = [...race.runners].sort((a, b) => a.rank - b.rank);
+  if (race.pick === 'last') rs.reverse();
+  return rs.slice(0, round.total);
 }
+function rWinners() { return rPicked().map(r => r.b); }
 
 function rShowResult() {
   race.state = 'result';
   const ws = rWinners(), many = ws.length > 1;
   showReveal({ race: true, winners: ws }, {
     c: ws[0].plugin.c, c2: ws[0].plugin.c2, who: ws[0].plugin.title,
-    tag: '1등으로 들어왔어요!',
+    tag: race.pick === 'last' ? '가장 늦게 들어왔어요!' : '1등으로 들어왔어요!',
     chips: many ? ws.map((b, i) => chip('span', b, i + 1)) : [],
     hint: HINT_CLOSE, autoNext: false,
   });
@@ -162,23 +173,24 @@ function rTick(dt) {
       if (t - race.skillSndAt > .35) { race.skillSndAt = t; sound.skill(e.s.kind); }
     }
   }
-  // 선두: 아직 안 들어온 주자 중 가장 앞(모두 들어왔으면 1등)
+  // 알림판 주인공: 먼저 들어온 쪽이면 선두, 늦게 들어온 쪽이면 지금 꼴찌. 결정되면 그 주자로 고정
+  const last = race.pick === 'last';
+  const key = rs.find(r => r.rank === (last ? rs.length - 1 : 0));   // 최종 1등 또는 꼴찌
   const running = rs.filter(r => t < r.T);
-  const lead = running.length ? running.reduce((a, b) => rPos(b, t) > rPos(a, t) ? b : a) : rs.find(r => r.rank === 0);
-  const first = rs.find(r => r.rank === 0);
-  const shown = t >= first.T ? first : lead;
+  const now = !running.length ? key : last
+    ? rs.reduce((a, b) => rPos(b, t) < rPos(a, t) ? b : a)
+    : running.reduce((a, b) => rPos(b, t) > rPos(a, t) ? b : a);
+  const decided = t >= key.T, shown = decided ? key : now;
   if (shown !== race.leader) {
-    if (race.leader && t - race.leadSndAt > .5 && t < first.T) { race.leadSndAt = t; sound.lead(); }
+    if (race.leader && t - race.leadSndAt > .5 && !decided) { race.leadSndAt = t; sound.lead(); }
     race.leader = shown;
   }
-  const lp = Math.min(1, rPos(lead, t));
-  showGauge(Math.max(1, Math.ceil(lp * 5)), t >= first.T ? `1등 ${first.b.plugin.title}` : `선두 ${shown.b.plugin.title}`);
-  els.tries.textContent = t >= first.T ? '결승!' : '달리는 중';
+  const lp = Math.min(1, rPos(now, t));
+  const word = last ? '꼴찌' : (decided ? '1등' : '선두');
+  showGauge(Math.max(1, Math.ceil(lp * 5)), `${word} ${shown.b.plugin.title}`);
+  els.tries.textContent = decided ? (last ? '꼴찌 결정!' : '결승!') : '달리는 중';
   if (!race.rolled && lp > .86) { race.rolled = true; sound.roll(2.2); }   // 막판 드럼롤
-  if (race.state === 'run') {
-    const lastWinner = Math.max(...rs.filter(r => r.rank < round.total).map(r => r.T));
-    if (t >= lastWinner + 1) rShowResult();
-  }
+  if (race.state === 'run' && t >= Math.max(...rPicked().map(r => r.T)) + 1) rShowResult();
 }
 
 // ── 그리기 도움 ──
@@ -325,6 +337,7 @@ function rDraw() {
   if (!L) return;
   const planned = rs.length && rs[0].track;
   const first = planned ? rs.find(r => r.rank === 0) : null;
+  const key = planned ? rs.find(r => r.rank === (race.pick === 'last' ? rs.length - 1 : 0)) : null;
   if (race.theme === 'field') bgField(L, !first || t < first.T);
   else if (race.theme === 'snail') bgSnail(L);
   else bgPlane(L);
@@ -367,8 +380,8 @@ function rDraw() {
   }
   // 위쪽 알림판: 지금 1등과 최근 스킬
   if (race.state !== 'idle' && t >= 0 && race.leader) {
-    const done = t >= first.T, lb = race.leader.b.plugin;
-    const head = done ? '1등' : '지금 1등', name = lb.title;
+    const done = t >= key.T, lb = race.leader.b.plugin, word = race.pick === 'last' ? '꼴찌' : '1등';
+    const head = done ? word : `지금 ${word}`, name = lb.title;
     g.font = `34px ${RFONT}`; const nw = g.measureText(name).width;
     const w = 150 + nw, y0 = L.TOP - 58;
     rRect(16, y0, w, 48, 24); g.fillStyle = 'rgba(30,22,50,.85)'; g.fill();
@@ -414,6 +427,13 @@ function setGame(gm) {
   els.tries.textContent = '준비 완료'; showGauge(0, '');
   updateUI(); save();
 }
+function setRacePick(p) {
+  if (race.state !== 'idle') return;
+  race.pick = p;
+  document.querySelectorAll('[data-pick]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pick === p));
+  if (race.runners.length && race.runners[0].track) rPrepare();   // 지난 결과 화면은 치운다
+  showGauge(0, ''); save();
+}
 function setRaceTheme(th) {
   if (race.state !== 'idle') return;
   race.theme = th;
@@ -423,11 +443,13 @@ function setRaceTheme(th) {
 els.gameClaw.addEventListener('click', () => setGame('claw'));
 els.gameRace.addEventListener('click', () => setGame('race'));
 document.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => setRaceTheme(b.dataset.theme)));
+document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => setRacePick(b.dataset.pick)));
 
 (() => {
   let s = {};
   try { s = JSON.parse(localStorage.getItem('claw.v2')) || {}; } catch (e) {}
   if (RACE_THEMES[s.theme]) setRaceTheme(s.theme);
+  if (s.pick === 'last') setRacePick('last');
   if (s.game === 'race') setGame('race');
 })();
 requestAnimationFrame(rFrame);
