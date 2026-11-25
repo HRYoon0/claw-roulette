@@ -449,7 +449,17 @@ function rollPower(tries) {
   return 5;
 }
 
-function pickTarget() { return capsules[fairIndex(capsules.length)]; }
+// 한 명을 뽑는 동안 이미 노렸던 캡슐은 다시 노리지 않는다(비복원).
+// 노리는 순서가 무작위 순열이 되고, 몇 번째에 성공할지는 캡슐과 상관없이 정해지므로
+// 최종 당첨 확률은 여전히 모두 같다.
+const tried = new Set();
+function pickTarget() {
+  let pool = capsules.filter(b => !tried.has(b));
+  if (!pool.length) { tried.clear(); pool = capsules; }   // 다 한 번씩 노렸으면 처음부터
+  const b = pool[fairIndex(pool.length)];
+  tried.add(b);
+  return b;
+}
 
 function showGauge(n, label) {
   els.cells.forEach((c, i) => c.classList.toggle('on', i < n));
@@ -471,6 +481,7 @@ function start() {
 
 function nextCatch() {
   claw.tries = 1;
+  tried.clear();
   sound.bgm('play');
   beginRoll();
 }
