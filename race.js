@@ -256,21 +256,15 @@ function bgSwim(L) {
     const x = left + ((k * 173 + tt * 18) % (right - left - 40)), y = L.TOP + 6 + (k * 61) % (L.BOT - L.TOP - 12);
     g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 9, y - 4, x + 18, y); g.quadraticCurveTo(x + 27, y + 4, x + 36, y); g.stroke();
   }
+  // 레인 구분: 줄 대신 물 색을 아주 옅게 번갈아 칠함(촘촘한 점 무늬는 눈이 아픔)
+  g.fillStyle = 'rgba(255,255,255,.07)';
+  for (let k = 0; k < L.n; k += 2) g.fillRect(left, L.TOP + L.LANE * k, right - left, L.LANE);
   // 레인 바닥 가운데 줄과 끝의 T
   g.fillStyle = 'rgba(12,45,100,.32)';
   for (let k = 0; k < L.n; k++) {
     const y = laneY(L, k), hh = Math.max(2, L.LANE * .1);
     g.fillRect(left + 50, y - hh / 2, right - left - 100, hh);
     g.fillRect(right - 54, y - L.LANE * .3, hh, L.LANE * .6);
-  }
-  // 레인 줄(부표): 양 끝은 빨강, 가운데는 하양과 파랑
-  const r = Math.max(2.2, Math.min(4.5, L.LANE * .12));
-  for (let k = 0; k <= L.n; k++) {
-    const y = L.TOP + L.LANE * k;
-    for (let x = left + 6, j = 0; x < right - 4; x += r * 2.6, j++) {
-      g.fillStyle = (x < left + 90 || x > right - 90) ? '#ff5a6e' : (j % 2 ? '#ffffff' : '#3a7be0');
-      g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
-    }
   }
   // 출발대와 터치 패드
   for (let k = 0; k < L.n; k++) {
