@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#33244f"/>
+  <!-- 줄과 집게 머리 -->
+  <path d="M32 3v9" stroke="#c3ccd5" stroke-width="3" stroke-linecap="round"/>
+  <rect x="21" y="10" width="22" height="9" rx="4" fill="#dfe5ea"/>
+  <!-- 캡슐: 위 분홍, 아래 노랑 -->
+  <path d="M16 41a16 16 0 0 1 32 0z" fill="#ff86ad"/>
+  <path d="M16 41a16 16 0 0 0 32 0z" fill="#ffe27a"/>
+  <path d="M17 41h30" stroke="#fff" stroke-width="2" opacity=".8"/>
+  <ellipse cx="25" cy="32" rx="4.5" ry="2.4" transform="rotate(-30 25 32)" fill="#fff" opacity=".85"/>
+  <!-- 양옆 집게발 -->
+  <path d="M24 18Q11 30 18 45" fill="none" stroke="#dfe5ea" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M40 18Q53 30 46 45" fill="none" stroke="#dfe5ea" stroke-width="4.5" stroke-linecap="round"/>
+</svg>
