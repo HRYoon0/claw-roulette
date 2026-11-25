@@ -87,7 +87,7 @@
     padding: 9px; border-radius: 24px;
     background: linear-gradient(135deg, #fbfcfd 0%, #c6cfd8 30%, #f4f7f9 52%, #a9b4bf 78%, #e9eef2 100%);
   }
-  #cv {
+  #cv, #rc {
     display: block; border-radius: 16px; background: #d6f2f0;
     /* 높이는 화면 높이로, 폭이 모자라면(오른쪽 카드 340px 와 여백을 뺀 폭) 폭 기준으로. 820/1100 = .7455 */
     --ch: max(260px, min(calc(100vh - 350px), 820px, calc((100vw - 490px) * .7455)));
@@ -107,6 +107,14 @@
   .stick .base { position: absolute; left: 8px; top: 56px; width: 50px; height: 16px; border-radius: 50%; background: var(--plum); opacity: .85; }
   .stick em { position: absolute; left: 0; right: 0; bottom: 0; font-style: normal; font-family: var(--jua); font-size: 16px; color: var(--plum); }
   .stick:disabled { cursor: default; opacity: .5; }
+  .machine.race .stick { visibility: hidden; }
+  .game { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .game button {
+    border: 2px solid #e6d6e1; background: #fff; border-radius: 16px; padding: 10px 6px;
+    font-family: var(--jua); font-size: 20px; color: var(--ink-soft);
+  }
+  .game button[aria-pressed="true"] { background: var(--plum); border-color: var(--plum); color: var(--butter); }
+  .game button:disabled { opacity: .5; cursor: default; }
   .stick.wiggle .rod { animation: joy .5s ease-in-out; }
   @keyframes joy { 20% { transform: rotate(-24deg); } 45% { transform: rotate(22deg); } 70% { transform: rotate(-14deg); } 100% { transform: rotate(0); } }
 
@@ -184,7 +192,7 @@
   @media (max-width: 1000px) {
     .app { flex-direction: column; align-items: center; }
     .placard { width: min(560px, 100%); }
-    #cv { --ch: max(220px, min(calc(100vh - 350px), calc((100vw - 100px) * .7455))); }
+    #cv, #rc { --ch: max(220px, min(calc(100vh - 350px), calc((100vw - 100px) * .7455))); }
   }
 
   /* ── 당첨 공개 ── */
@@ -235,7 +243,7 @@
       <h1>오늘의 주인공 뽑기</h1>
       <div class="bulbs bottom" aria-hidden="true"></div>
     </div>
-    <div class="glass"><canvas id="cv" aria-label="인형 뽑기 기계 안"></canvas></div>
+    <div class="glass"><canvas id="cv" aria-label="인형 뽑기 기계 안"></canvas><canvas id="rc" aria-label="달리기 경주" hidden></canvas></div>
     <div class="deck">
       <button class="stick" id="shake" title="캡슐 흔들기"><span class="base"></span><span class="rod"></span><em>흔들기</em></button>
       <div class="screen" aria-live="polite">
@@ -248,7 +256,11 @@
   </section>
 
   <aside class="placard">
-    <h2>캡슐 넣기</h2>
+    <div class="game" role="group" aria-label="룰렛 고르기">
+      <button id="gameClaw" aria-pressed="true">인형 뽑기</button>
+      <button id="gameRace" aria-pressed="false">달리기</button>
+    </div>
+    <h2>뽑을 사람 넣기</h2>
     <div class="seg" role="group" aria-label="캡슐 만드는 방법">
       <button id="modeNum" aria-pressed="true">번호로</button>
       <button id="modeName" aria-pressed="false">이름으로</button>
@@ -270,11 +282,21 @@
 
     <button class="fill" id="apply">캡슐 채우기</button>
 
-    <h3>놓치는 정도</h3>
-    <div class="seg" role="group" aria-label="놓치는 정도">
-      <button data-luck="easy" aria-pressed="false">잘 잡혀요</button>
-      <button data-luck="normal" aria-pressed="true">보통</button>
-      <button data-luck="hard" aria-pressed="false">잘 놓쳐요</button>
+    <div id="luckBox" class="field">
+      <h3>놓치는 정도</h3>
+      <div class="seg" role="group" aria-label="놓치는 정도">
+        <button data-luck="easy" aria-pressed="false">잘 잡혀요</button>
+        <button data-luck="normal" aria-pressed="true">보통</button>
+        <button data-luck="hard" aria-pressed="false">잘 놓쳐요</button>
+      </div>
+    </div>
+    <div id="themeBox" class="field" hidden>
+      <h3>경주 종류</h3>
+      <div class="seg" role="group" aria-label="경주 종류">
+        <button data-theme="field" aria-pressed="true">운동회</button>
+        <button data-theme="snail" aria-pressed="false">달팽이</button>
+        <button data-theme="plane" aria-pressed="false">종이비행기</button>
+      </div>
     </div>
 
     <h3>한 번에 뽑을 사람</h3>
@@ -336,7 +358,7 @@ const els = {
   count: $('count'), removeWinner: $('removeWinner'), soundOn: $('soundOn'), bgmOn: $('bgmOn'), reveal: $('reveal'), who: $('who'),
   tries: $('tries'), powerLabel: $('powerLabel'), cells: [...document.querySelectorAll('.gauge i')],
   from: $('from'), to: $('to'), skip: $('skip'), names: $('names'), numBox: $('numBox'), nameBox: $('nameBox'),
-  modeNum: $('modeNum'), modeName: $('modeName'),
+  modeNum: $('modeNum'), modeName: $('modeName'), gameClaw: $('gameClaw'), gameRace: $('gameRace'),
   pickN: $('pickN'), nMinus: $('nMinus'), nPlus: $('nPlus'), tag: $('tag'), all: $('all'), hint: $('hint'),
 };
 document.querySelectorAll('.bulbs').forEach(b => { b.innerHTML = '<i></i>'.repeat(15); });
@@ -464,14 +486,17 @@ function pickTarget() {
 function showGauge(n, label) {
   els.cells.forEach((c, i) => c.classList.toggle('on', i < n));
   els.powerLabel.classList.toggle('idle', !label);
-  els.powerLabel.textContent = label || '집게 힘은 도전마다 새로 정해져요';
+  els.powerLabel.textContent = label || (game === 'race' ? '먼저 들어온 차례대로 뽑혀요' : '집게 힘은 도전마다 새로 정해져요');
 }
 
 // 한 판에 여러 명: 뽑힌 캡슐은 판이 끝날 때까지 기계 밖에 두어 같은 사람이 두 번 나오지 않게 한다
 const round = { total: 1, got: [] };
 function pickCount() { return Math.max(1, Math.min(30, Math.floor(+els.pickN.value || 1))); }
 
+let game = 'claw';   // 'claw' 인형 뽑기, 'race' 달리기
+
 function start() {
+  if (game === 'race') { raceStart(); return; }
   if (claw.state !== 'idle' || settling || capsules.length === 0) return;
   round.total = Math.min(pickCount(), capsules.length);
   round.got = [];
@@ -644,17 +669,31 @@ function stepClaw(dt) {
 
 // ── 당첨 공개 ──
 let revealing = null;
+const HINT_CLOSE = '화면을 누르거나 스페이스를 누르면 닫혀요';
+
 function reveal(b) {
-  revealing = b;
-  const r = els.reveal;
-  r.style.setProperty('--c', b.plugin.c);
-  r.style.setProperty('--c2', b.plugin.c2);
-  els.who.textContent = b.plugin.title;
-  const k = round.got.length + 1, last = k >= round.total;
-  els.tag.textContent = round.total > 1 ? `${k}번째로 뽑혔어요!` : '뽑혔어요!';
-  els.all.hidden = !(last && round.total > 1);
-  els.all.replaceChildren(...(last && round.total > 1 ? [...round.got, b].map((x, i) => chip('span', x, i + 1)) : []));
-  els.hint.textContent = last ? '화면을 누르거나 스페이스를 누르면 닫혀요' : '잠시 뒤 다음 친구를 뽑아요. 누르면 바로 넘어가요';
+  const k = round.got.length + 1, last = k >= round.total, many = round.total > 1;
+  showReveal(b, {
+    c: b.plugin.c, c2: b.plugin.c2, who: b.plugin.title,
+    tag: many ? `${k}번째로 뽑혔어요!` : '뽑혔어요!',
+    chips: last && many ? [...round.got, b].map((x, i) => chip('span', x, i + 1)) : [],
+    hint: last ? HINT_CLOSE : '잠시 뒤 다음 친구를 뽑아요. 누르면 바로 넘어가요',
+    autoNext: !last,
+  });
+}
+
+// 당첨 공개 화면(인형 뽑기와 달리기가 함께 씀). token 은 closeReveal 이 받아 처리한다
+function showReveal(token, { c, c2, who, tag, chips, hint, autoNext }) {
+  revealing = token;
+  const r = els.reveal, b = token;
+  r.style.setProperty('--c', c);
+  r.style.setProperty('--c2', c2);
+  els.who.textContent = who;
+  els.tag.textContent = tag;
+  els.all.hidden = !chips.length;
+  els.all.replaceChildren(...chips);
+  els.hint.textContent = hint;
+  const last = !autoNext;
   r.className = 'reveal';
   r.hidden = false;
   void r.offsetWidth;   // 애니메이션을 처음부터
@@ -681,6 +720,7 @@ function closeReveal() {
   if (!b) return;
   revealing = null;
   els.reveal.hidden = true;
+  if (b.race) { raceDone(b.winners); return; }   // 달리기 결과는 race.js 가 마무리
   els.log.appendChild(chip('li', b, els.log.children.length + 1));
   els.log.scrollTop = els.log.scrollHeight;
   Composite.remove(world, b);
@@ -722,17 +762,22 @@ function shakeMachine() {
 }
 
 function updateUI() {
-  const busy = claw.state !== 'idle';
-  els.go.disabled = busy || !!settling || capsules.length === 0;
+  const racing = typeof race !== 'undefined' && race.state !== 'idle';
+  const busy = claw.state !== 'idle' || racing;
+  els.go.disabled = busy || (game === 'claw' && !!settling) || capsules.length === 0;
   els.shake.disabled = els.go.disabled;
   els.apply.disabled = busy;
-  const n = pickCount();
-  els.go.innerHTML = n > 1 ? `<small>${n}명</small>뽑기!` : '뽑기!';
+  els.gameClaw.disabled = els.gameRace.disabled = busy;
+  const n = pickCount(), word = game === 'race' ? '달려!' : '뽑기!';
+  els.go.innerHTML = n > 1 ? `<small>${n}명</small>${word}` : word;
+  els.apply.textContent = game === 'race' ? '참가자 채우기' : '캡슐 채우기';
   els.nMinus.disabled = busy || n <= 1;
   els.nPlus.disabled = busy || n >= 30;
   els.pickN.disabled = busy;
   els.machine.classList.toggle('playing', busy);
-  els.count.textContent = capsules.length ? `기계 안에 캡슐 ${capsules.length}개` : '캡슐이 없어요. 위에서 «캡슐 채우기»를 눌러요.';
+  els.count.textContent = !capsules.length ? `아직 아무도 없어요. 위에서 «${els.apply.textContent}»를 눌러요.`
+    : game === 'race' ? `달리기 참가자 ${Math.min(30, capsules.length)}명` + (capsules.length > 30 ? ` (${capsules.length}명 중 30명이 무작위로 달려요)` : '')
+    : `기계 안에 캡슐 ${capsules.length}개`;
   els.emptyLog.hidden = els.log.children.length > 0;
 }
 
@@ -1003,6 +1048,10 @@ const sound = (() => {
     drop() { if (!play('drop', { vol: 1 })) { tone(700, .18, { to: 240, vol: .16 }); tone(260, .12, { type: 'triangle', vol: .12, at: .45 }); } },
     rattle() { if (!play('shake', { vol: .9 })) for (let i = 0; i < 7; i++) tone(900 + Math.random() * 600, .04, { type: 'square', vol: .04, at: i * .13 }); },
     pop() { play('pop', { vol: .9 }); },
+    // 달리기용: 출발 신호, 스킬(빨라짐은 밝게, 나머지는 낮게), 선두가 바뀔 때
+    go() { if (!play('hit-strong', { vol: .9 })) tone(880, .25, { type: 'triangle', vol: .15 }); },
+    skill(kind) { if (!play(kind === 'dash' ? 'hit-strong' : 'hit-weak', { vol: .28, rate: kind === 'dash' ? 1.25 : 1 })) tone(kind === 'dash' ? 660 : 300, .08, { type: 'triangle', vol: .06 }); },
+    lead() { if (!play('grab', { vol: .3, rate: 1.5 })) tone(990, .05, { type: 'square', vol: .04 }); },
     fanfare() { if (!play('fanfare', { vol: .95 })) [523, 659, 784, 1047].forEach((f, i) => tone(f, i === 3 ? .6 : .22, { type: 'triangle', vol: .17, at: i * .11 })); },
     // 배경 음악: play 로 키우고, duck 으로 잠깐 줄이고(당첨 공개 동안), stop 으로 끈다
     bgm(mode) {
@@ -1024,6 +1073,7 @@ function save() {
   localStorage.setItem('claw.v2', JSON.stringify({
     mode, from: els.from.value, to: els.to.value, skip: els.skip.value, names: els.names.value,
     luck, remove: els.removeWinner.checked, sound: els.soundOn.checked, bgm: els.bgmOn.checked, pickN: pickCount(),
+    game, theme: typeof race !== 'undefined' ? race.theme : undefined,
   }));
 }
 function setMode(m) {
@@ -1083,5 +1133,6 @@ fillMachine();
 document.fonts.load('20px Jua').then(() => capsules.forEach(b => { b.plugin.fs = 0; }));
 requestAnimationFrame(loop);
 </script>
+<script src="race.js"></script>
 </body>
 </html>
