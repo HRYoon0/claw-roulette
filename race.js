@@ -1,4 +1,4 @@
-// 달리기 룰렛: 운동회 달리기, 느림보 달팽이, 교실 종이비행기.
+// 달리기 룰렛: 운동회 달리기, 수영 경기, 교실 종이비행기.
 // index.html 의 명단(capsules), 설정, 소리, 공개 화면, 기록을 함께 쓴다(일반 <script> 끼리는 맨 위 선언을 공유).
 //
 // 공정성: 도착 순서를 출발 전에 암호학 난수(index 의 shuffle)로 먼저 정한다. 그다음 스킬이 섞인
@@ -23,12 +23,12 @@ const RACE_THEMES = {
     { name: '꽈당!', kind: 'stop', dur: 1.3, fall: true },
     { name: '맞바람', kind: 'slow', dur: 2.0, m: .4 },
   ],
-  snail: [
-    { name: '점액 미끄럼', kind: 'dash', dur: 1.7, m: 2.4 },
-    { name: '껍질 굴리기!', kind: 'dash', dur: 1.3, m: 3.0, roll: true },
-    { name: '꾸벅 낮잠', kind: 'stop', dur: 2.2, zzz: true },
-    { name: '상추 냠냠', kind: 'stop', dur: 1.6 },
-    { name: '참새다!', kind: 'back', dur: 1.0, m: -.7 },
+  swim: [
+    { name: '돌핀킥!', kind: 'dash', dur: 1.7, m: 2.4 },
+    { name: '접영 스퍼트!', kind: 'dash', dur: 1.3, m: 3.0, fly: true },
+    { name: '물 먹음 켁켁', kind: 'stop', dur: 1.8, cough: true },
+    { name: '수경 김서림', kind: 'slow', dur: 2.0, m: .4, fog: true },
+    { name: '파도 맞음', kind: 'back', dur: 1.0, m: -.6 },
   ],
   plane: [
     { name: '상승 기류!', kind: 'dash', dur: 1.7, m: 2.3 },
@@ -229,30 +229,56 @@ function bgField(L, tapeUp) {
   if (tapeUp) { g.strokeStyle = '#ff3d6e'; g.lineWidth = 3; g.beginPath(); g.moveTo(L.FIN + 14, L.TOP - 6); g.lineTo(L.FIN + 14, L.BOT + 6); g.stroke(); }
 }
 
-function bgSnail(L) {
-  g.fillStyle = '#d7f0c6'; g.fillRect(0, 0, RW, L.TOP);
-  for (let x = 6; x < RW; x += 26) { rRect(x, 14, 16, L.TOP - 22, [8, 8, 0, 0]); g.fillStyle = '#fffdf5'; g.fill(); }
-  g.fillStyle = '#f4ead2'; g.fillRect(0, 50, RW, 7);
-  for (let k = 0; k < 11; k++) {
-    const x = 36 + k * 102, y = L.TOP - 26;
-    g.strokeStyle = '#4f9a4a'; g.lineWidth = 3; g.beginPath(); g.moveTo(x, y + 20); g.lineTo(x, y); g.stroke();
-    g.fillStyle = `hsl(${(k * 67 + 330) % 360} 85% 70%)`;
-    for (let a = 0; a < 5; a++) { g.beginPath(); g.arc(x + 7 * Math.cos(a * 1.26), y + 7 * Math.sin(a * 1.26), 6, 0, 7); g.fill(); }
-    g.fillStyle = '#ffd95a'; g.beginPath(); g.arc(x, y, 4.5, 0, 7); g.fill();
+function bgSwim(L) {
+  const deck = '#e7f3f6', left = L.START - 44, right = L.FIN + 18;
+  g.fillStyle = deck; g.fillRect(0, 0, RW, RH);
+  g.strokeStyle = 'rgba(110,165,185,.3)'; g.lineWidth = 1;   // 데크 타일
+  for (let x = 0; x < RW; x += 28) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, RH); g.stroke(); }
+  for (let y = 0; y < RH; y += 28) { g.beginPath(); g.moveTo(0, y); g.lineTo(RW, y); g.stroke(); }
+  // 배영 깃발 줄
+  g.strokeStyle = '#7a8a96'; g.lineWidth = 1.5; g.beginPath();
+  for (let x = 0; x <= RW; x += 8) { const y = 20 + 12 * Math.sin(Math.PI * x / RW); x ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke();
+  for (let x = 10, k = 0; x < RW - 20; x += 28, k++) {
+    const y = 20 + 12 * Math.sin(Math.PI * x / RW);
+    g.fillStyle = ['#e63950', '#ffffff', '#2f6fd6'][k % 3];
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + 20, y + 1); g.lineTo(x + 10, y + 17); g.fill();
   }
-  for (let k = 0; k < L.n; k++) { g.fillStyle = k % 2 ? '#b98658' : '#c99568'; g.fillRect(0, L.TOP + L.LANE * k, RW, L.LANE); }
-  g.fillStyle = '#5fae4f';
-  for (let k = 0; k <= L.n; k++) for (let x = 14; x < RW; x += 46) {
+  // 물
+  const w = g.createLinearGradient(0, L.TOP, 0, L.BOT);
+  w.addColorStop(0, '#46bde4'); w.addColorStop(1, '#1d82c2');
+  g.fillStyle = w; g.fillRect(left, L.TOP - 8, right - left, L.BOT - L.TOP + 16);
+  g.strokeStyle = '#c9e3ea'; g.lineWidth = 6; g.strokeRect(left, L.TOP - 8, right - left, L.BOT - L.TOP + 16);
+  // 물결 반짝임(천천히 흐름)
+  const tt = performance.now() / 1000;
+  g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 2;
+  for (let k = 0; k < 22; k++) {
+    const x = left + ((k * 173 + tt * 18) % (right - left - 40)), y = L.TOP + 6 + (k * 61) % (L.BOT - L.TOP - 12);
+    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 9, y - 4, x + 18, y); g.quadraticCurveTo(x + 27, y + 4, x + 36, y); g.stroke();
+  }
+  // 레인 바닥 가운데 줄과 끝의 T
+  g.fillStyle = 'rgba(12,45,100,.32)';
+  for (let k = 0; k < L.n; k++) {
+    const y = laneY(L, k), hh = Math.max(2, L.LANE * .1);
+    g.fillRect(left + 50, y - hh / 2, right - left - 100, hh);
+    g.fillRect(right - 54, y - L.LANE * .3, hh, L.LANE * .6);
+  }
+  // 레인 줄(부표): 양 끝은 빨강, 가운데는 하양과 파랑
+  const r = Math.max(2.2, Math.min(4.5, L.LANE * .12));
+  for (let k = 0; k <= L.n; k++) {
     const y = L.TOP + L.LANE * k;
-    g.beginPath(); g.moveTo(x, y + 3); g.lineTo(x + 4, y - 6); g.lineTo(x + 8, y + 3); g.lineTo(x + 12, y - 4); g.lineTo(x + 15, y + 3); g.fill();
+    for (let x = left + 6, j = 0; x < right - 4; x += r * 2.6, j++) {
+      g.fillStyle = (x < left + 90 || x > right - 90) ? '#ff5a6e' : (j % 2 ? '#ffffff' : '#3a7be0');
+      g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    }
   }
-  for (let k = 0; k < L.n; k++) {   // 결승선 너머 상추
-    const y = laneY(L, k), s = L.s;
-    g.fillStyle = '#6cc24a'; g.beginPath(); g.ellipse(L.FIN + 46, y, 22 * s, 15 * s, .3, 0, 7); g.fill();
-    g.fillStyle = '#9be36f'; g.beginPath(); g.ellipse(L.FIN + 54, y - 4 * s, 15 * s, 10 * s, -.4, 0, 7); g.fill();
+  // 출발대와 터치 패드
+  for (let k = 0; k < L.n; k++) {
+    const y = laneY(L, k), hh = Math.min(26, L.LANE * .7);
+    rRect(left - 26, y - hh / 2, 22, hh, 4); g.fillStyle = '#ffffff'; g.fill();
+    g.strokeStyle = '#b9cdd5'; g.lineWidth = 1.5; g.stroke();
   }
-  g.strokeStyle = 'rgba(255,255,255,.85)'; g.setLineDash([8, 8]); g.lineWidth = 3;
-  g.beginPath(); g.moveTo(L.FIN, L.TOP); g.lineTo(L.FIN, L.BOT); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#ffd95a'; g.fillRect(right - 6, L.TOP - 8, 6, L.BOT - L.TOP + 16);
 }
 
 function bgPlane(L) {
@@ -289,23 +315,37 @@ function drawKid(c, ph, e) {
   if (still && !e.s.fall) { g.fillStyle = '#7fc8ff'; g.beginPath(); g.arc(13, -30, 3, 0, 7); g.fill(); }
 }
 
-function drawSnail(c, ph, e, t) {
-  const still = e && e.s.kind === 'stop', st = still ? 1 : 1 + .08 * Math.sin(ph * .8);
-  g.fillStyle = 'rgba(0,0,0,.15)'; g.beginPath(); g.ellipse(0, 15, 22, 4, 0, 0, 7); g.fill();
-  if (!(e && e.s.roll)) {
-    g.save(); g.scale(st, 1);
-    g.fillStyle = '#dbe8a6'; g.strokeStyle = '#a9b96f'; g.lineWidth = 2;
-    g.beginPath(); g.moveTo(-22, 12); g.quadraticCurveTo(-6, 2, 14, 4); g.quadraticCurveTo(22, 2, 22, 10); g.quadraticCurveTo(20, 15, 0, 15); g.closePath(); g.fill(); g.stroke();
-    g.beginPath(); g.moveTo(16, 4); g.lineTo(19, -10); g.moveTo(19, 5); g.lineTo(25, -7); g.stroke();
-    g.fillStyle = '#33244f'; g.beginPath(); g.arc(19, -11, 2.4, 0, 7); g.arc(25, -8, 2.4, 0, 7); g.fill();
-    g.restore();
+function drawSwimmer(c, ph, e, t) {
+  const still = e && e.s.kind === 'stop', fast = e && e.s.kind === 'dash';
+  // 물속 몸(반투명)
+  g.fillStyle = 'rgba(255,210,175,.42)'; g.beginPath(); g.ellipse(-12, 4, 19, 6, 0, 0, 7); g.fill();
+  // 발차기 물보라
+  if (!still) {
+    g.fillStyle = 'rgba(255,255,255,.85)';
+    for (let k = 0; k < (fast ? 5 : 3); k++) { g.beginPath(); g.arc(-32 - k * 6, 2 + Math.sin(ph * 2 + k) * 3, (fast ? 4 : 3) - k * .5, 0, 7); g.fill(); }
   }
-  g.save(); g.translate(-4, -2); g.rotate(e && e.s.roll ? t * 14 : 0);
-  g.fillStyle = c; g.beginPath(); g.arc(0, 0, 14, 0, 7); g.fill();
-  g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 2.2; g.beginPath();
-  for (let a = 0; a < 12; a += .3) { const r = 2 + a * .95; a ? g.lineTo(r * Math.cos(a), r * Math.sin(a)) : g.moveTo(r, 0); }
-  g.stroke(); g.restore();
-  if (e && e.s.zzz) for (let k = 0; k < 3; k++) rText('z', 16 + k * 7, -22 - k * 8 - (t * 8 % 6), 13 + k * 3, '#33244f', 'center', ['#fff', 3]);
+  // 팔 젓기: 두 팔이 번갈아 머리 앞쪽으로 원을 그림(접영이면 두 팔 함께)
+  g.lineCap = 'round'; g.strokeStyle = '#f2c49c'; g.lineWidth = 4.5;
+  const arms = e && e.s.fly ? [0, 0] : [0, Math.PI];
+  for (const off of arms) {
+    const a = (still ? 2.4 : ph * .9) + off, up = Math.sin(a) > 0;
+    g.globalAlpha = up ? 1 : .35;
+    g.beginPath(); g.moveTo(2, -1); g.lineTo(2 + 17 * Math.cos(a), -1 - 13 * Math.sin(a)); g.stroke();
+    if (!still && Math.cos(a) > .93) { g.fillStyle = 'rgba(255,255,255,.9)'; g.beginPath(); g.arc(20, 4, 3.5, 0, 7); g.arc(24, 1, 2.5, 0, 7); g.fill(); }
+  }
+  g.globalAlpha = 1;
+  // 머리: 수영모(참가자 색)와 수경
+  g.fillStyle = '#f5cfa8'; g.beginPath(); g.arc(10, still ? -4 : 0, 8, 0, 7); g.fill();
+  g.fillStyle = c; g.beginPath(); g.arc(10, (still ? -4 : 0) - 1, 8.7, Math.PI * .92, Math.PI * 2.08); g.fill();
+  g.fillStyle = e && e.s.fog ? '#eef7ff' : '#33244f';
+  g.beginPath(); g.ellipse(15, still ? -3 : 1, 3.4, 2.4, 0, 0, 7); g.fill();
+  // 머리 앞 물결
+  g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 2;
+  g.beginPath(); g.arc(19, 6, 6, Math.PI * 1.1, Math.PI * 1.7); g.stroke();
+  if (e && e.s.cough) {   // 물 먹음: 거품이 올라옴
+    g.fillStyle = 'rgba(255,255,255,.85)';
+    for (let k = 0; k < 3; k++) { g.beginPath(); g.arc(20 + k * 5, -14 - ((t * 22 + k * 7) % 16), 2.5 + k * .6, 0, 7); g.fill(); }
+  }
 }
 
 function drawPlane(c, ph, e, t) {
@@ -339,7 +379,7 @@ function rDraw() {
   const first = planned ? rs.find(r => r.rank === 0) : null;
   const key = planned ? rs.find(r => r.rank === (race.pick === 'last' ? rs.length - 1 : 0)) : null;
   if (race.theme === 'field') bgField(L, !first || t < first.T);
-  else if (race.theme === 'snail') bgSnail(L);
+  else if (race.theme === 'swim') bgSwim(L);
   else bgPlane(L);
 
   if (!rs.length) { rText('위에서 «참가자 채우기»를 눌러요', RW / 2, RH / 2, 34, '#fff', 'center', ['#33244f', 8]); return; }
@@ -353,7 +393,7 @@ function rDraw() {
     g.save(); g.translate(x, y); g.scale(L.s, L.s);
     drawEffect(e);
     if (race.theme === 'field') drawKid(r.b.plugin.c, r.phase, e);
-    else if (race.theme === 'snail') drawSnail(r.b.plugin.c, r.phase, e, t);
+    else if (race.theme === 'swim') drawSwimmer(r.b.plugin.c, r.phase, e, t);
     else drawPlane(r.b.plugin.c, r.phase, e, t);
     g.restore();
     // 번호(이름) 꼬리표: 주자 왼쪽
