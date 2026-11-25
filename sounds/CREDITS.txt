@@ -1,0 +1,20 @@
+효과음 출처 — 모두 CC0(퍼블릭 도메인). 출처 표시 의무는 없지만 기록해 둡니다.
+
+Kenney (www.kenney.nl), CC0 — 각 묶음 안 License.txt 확인
+  - Music Jingles: jingles_HIT03 → hit-strong, HIT05 → hit-mid, HIT04 → hit-weak, NES11 → miss
+  - Impact Sounds: impactMetal_medium_000 → grab, impactPlate_medium_000 → drop
+  - Casino Audio: cards-pack-open-1 → pop, dice-shake-1 → shake
+  - Sci-Fi Sounds: spaceEngineSmall_000 → motor
+
+OpenGameArt.org, 페이지 사용권 표기 CC0 단독인 것만
+  - "An interesting snare drum sound"  https://opengameart.org/content/an-interesting-snare-drum-sound → snare(드럼롤 재료)
+  - "Classic fanfare lick"            https://opengameart.org/content/classic-fanfare-lick → fanfare
+  - "Let the Games Begin"             https://opengameart.org/content/let-the-games-begin-0 → bgm(앞 95초)
+
+candidates/ 폴더는 비교 듣기용 후보(sounds.html 에서 재생). 출처는 위 두 곳의 같은 묶음, 그리고
+  "Winning the Race" https://opengameart.org/content/winning-the-race
+  "Urgent!" https://opengameart.org/content/urgent
+  "Spy running theme" https://opengameart.org/content/spy-running-theme
+  "Hyper-Ultra-Fanfare" https://opengameart.org/content/hyper-ultra-fanfare
+  "Win sound effect" https://opengameart.org/content/win-sound-effect
+  "8bit fanfare jingle The Lick" https://opengameart.org/content/8bit-fanfare-jingle-the-lick
