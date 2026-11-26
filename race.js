@@ -48,7 +48,7 @@ const race = {
 
 // ── 준비: 명단으로 줄 세우기 ──
 function rLayout(n) {
-  const TOP = n <= 12 ? 160 : 124, BOT = RH - 28, LANE = (BOT - TOP) / Math.max(n, 1);
+  const TOP = n <= 12 ? 140 : 92, BOT = RH - 28, LANE = (BOT - TOP) / Math.max(n, 1);
   return { n, TOP, BOT, LANE, START: 170, FIN: RW - 110, s: Math.max(.6, Math.min(1.35, LANE / 38)) };   // 캐릭터는 줄보다 조금 크게(살짝 겹쳐도 잘 보이게)
 }
 
@@ -120,6 +120,7 @@ function raceStart() {
   round.total = Math.min(pickCount(), race.runners.length);
   rPlan();
   Object.assign(race, { state: 'run', clock: 0, log: [], leader: null, rolled: false, went: false, leadSndAt: -9, skillSndAt: -9 });
+  document.body.classList.add('stage');   // 달리는 동안 경주 화면만 창 가득
   sound.bgm('play');
   sound.roll(RLEAD - .3);
   els.tries.textContent = '준비!';
@@ -154,6 +155,8 @@ function raceDone(ws) {
     capsules = capsules.filter(b => !ws.includes(b));
   }
   race.state = 'idle';
+  race.slow = 1;
+  document.body.classList.remove('stage');
   sound.bgm('stop');
   els.tries.textContent = '준비 완료'; showGauge(0, '');
   updateUI();
@@ -191,6 +194,25 @@ function rTick(dt) {
   els.tries.textContent = decided ? (last ? '꼴찌 결정!' : '결승!') : '달리는 중';
   if (!race.rolled && lp > .86) { race.rolled = true; sound.roll(2.2); }   // 막판 드럼롤
   if (race.state === 'run' && t >= Math.max(...rPicked().map(r => r.T)) + 1) rShowResult();
+}
+
+// ── 결승선 클로즈업: 승부가 갈리는 순간 앞뒤로 결승선 쪽을 키우고 조금 느리게 ──
+function rCamera(t) {
+  const rs = race.runners, L = race.lay, none = { z: 1, x: 0, y: 0 };
+  if (race.state === 'idle' || !rs.length || !rs[0].track) return none;
+  const n = rs.length, last = race.pick === 'last';
+  const key = rs.find(r => r.rank === (last ? n - 1 : 0));                 // 승부의 주인공(1등 또는 꼴찌)
+  const rival = rs.find(r => r.rank === (last ? n - 2 : 1)) || key;        // 맞붙은 상대
+  const ease = u => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
+  const a = ease((t - (key.T - 2.6)) / .7) * (1 - ease((t - (key.T + .9)) / .7));
+  if (a <= .001) return none;
+  // 두 주자가 함께 들어오는 만큼만 키운다(최대 2.2배)
+  const y1 = laneY(L, key.lane), y2 = laneY(L, rival.lane);
+  const zMax = Math.max(1, Math.min(2.2, RH * .8 / (Math.abs(y1 - y2) + L.LANE * 3)));
+  const z = 1 + a * (zMax - 1);
+  const x = Math.max(0, Math.min(RW - RW / z, L.FIN - RW * .66 / z));
+  const y = Math.max(0, Math.min(RH - RH / z, (y1 + y2) / 2 - RH * .55 / z));
+  return { z, x, y };
 }
 
 // ── 그리기 도움 ──
@@ -369,6 +391,9 @@ function drawEffect(e) {
 function rDraw() {
   const L = race.lay, t = race.clock - RLEAD, rs = race.runners;
   if (!L) return;
+  const cam = rCamera(t);
+  race.slow = cam.z > 1.3 ? .6 : 1;   // 확대 중에는 느리게
+  g.setTransform(DPR * cam.z, 0, 0, DPR * cam.z, -cam.x * cam.z * DPR, -cam.y * cam.z * DPR);
   const planned = rs.length && rs[0].track;
   const first = planned ? rs.find(r => r.rank === 0) : null;
   const key = planned ? rs.find(r => r.rank === (race.pick === 'last' ? rs.length - 1 : 0)) : null;
@@ -378,7 +403,7 @@ function rDraw() {
 
   if (!rs.length) { rText('위에서 «참가자 채우기»를 눌러요', RW / 2, RH / 2, 34, '#fff', 'center', ['#33244f', 8]); return; }
 
-  const tagH = Math.max(16, Math.min(30, L.LANE * .88)), tagF = Math.round(tagH * .7);
+  const tagH = Math.max(18, Math.min(40, L.LANE * .98)), tagF = Math.round(tagH * .78);   // 번호가 주인공: 레인 높이만큼
   const active = [];
   for (const r of rs) {
     const p = rPos(r, t), x = L.START + (L.FIN - L.START) * p, y = laneY(L, r.lane);
@@ -392,9 +417,10 @@ function rDraw() {
     g.restore();
     // 번호(이름) 꼬리표: 주자 왼쪽
     g.font = `${tagF}px ${RFONT}`;
-    const label = r.b.plugin.label, tw = g.measureText(label).width + tagH * .7;
+    const label = r.b.plugin.label, tw = Math.max(tagH, g.measureText(label).width + tagH * .55);   // 짧은 번호는 동그라미
     rRect(x - 30 * L.s - tw, y - tagH / 2, tw, tagH, tagH / 2); g.fillStyle = r.b.plugin.c; g.fill();
-    rText(label, x - 30 * L.s - tw / 2, y + 1, tagF, '#fff', 'center', ['rgba(40,25,60,.55)', 3]);
+    g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
+    rText(label, x - 30 * L.s - tw / 2, y + 1, tagF, '#fff', 'center', ['rgba(40,25,60,.6)', 4]);
     if (planned && t >= r.T) {   // 들어온 순위
       const rk = r.rank, w = tagH * 1.6;
       rRect(x + 28 * L.s, y - tagH / 2, w, tagH, tagH / 2); g.fillStyle = rk < 3 ? MEDAL[rk] : 'rgba(255,255,255,.85)'; g.fill();
@@ -403,7 +429,7 @@ function rDraw() {
     if (e) active.push([x, y, e]);
   }
   // 스킬 말풍선
-  const bf = Math.max(12, Math.min(18, L.LANE * .5));
+  const bf = Math.max(13, Math.min(20, L.LANE * .6));
   for (const [x, y, e] of active) {
     g.font = `${bf}px ${RFONT}`;
     const w = g.measureText(e.s.name).width + 16, h = bf + 10;
@@ -411,6 +437,11 @@ function rDraw() {
     rRect(bx, by, w, h, h / 2); g.fillStyle = KIND_COLOR[e.s.kind]; g.fill();
     g.strokeStyle = 'rgba(51,36,79,.35)'; g.lineWidth = 1.5; g.stroke();
     rText(e.s.name, bx + w / 2, by + h / 2 + 1, bf, '#33244f');
+  }
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);   // 알림판과 출발 글씨는 확대하지 않는다
+  if (cam.z > 1.05) {   // 클로즈업 중 표시
+    rRect(RW / 2 - 92, RH - 52, 184, 38, 19); g.fillStyle = 'rgba(30,22,50,.8)'; g.fill();
+    rText('결승선 클로즈업', RW / 2, RH - 32, 22, '#ffd95a');
   }
   // 위쪽 알림판: 지금 1등과 최근 스킬
   if (race.state !== 'idle' && t >= 0 && race.leader) {
@@ -442,7 +473,7 @@ function rFrame(now) {
   const dt = Math.min(.05, (now - rLast) / 1000); rLast = now;
   if (game === 'race') {
     if (race.state === 'idle' && race.src !== capsules) rPrepare();   // 명단이 바뀌면 다시 줄 세움
-    if (race.state !== 'idle') rTick(dt);
+    if (race.state !== 'idle') rTick(dt * (race.slow || 1));
     rDraw();
   }
   requestAnimationFrame(rFrame);

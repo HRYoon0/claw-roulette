@@ -188,6 +188,13 @@
   #log li small { font-family: 'Pretendard Variable', sans-serif; font-size: 12px; color: var(--ink-soft); margin-right: 4px; }
   .empty-log { margin: 0; font-size: 14px; color: var(--ink-soft); }
   [hidden] { display: none !important; }
+  /* 달리는 동안 무대 모드: 경주 화면만 창 가득(결과를 닫으면 원래대로) */
+  body.stage .app, body.stage .credit { visibility: hidden; }
+  body.stage #rc {
+    visibility: visible; position: fixed; z-index: 8; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(calc(100vw - 24px), calc((100vh - 24px) * 1.3415)); height: auto; aspect-ratio: 1100 / 820;
+    border-radius: 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+  }
   .credit {
     position: fixed; right: 14px; bottom: 10px; z-index: 5; margin: 0;
     font-size: 13px; font-weight: 500; color: #e6dcf2;
