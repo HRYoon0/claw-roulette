@@ -195,6 +195,8 @@
     width: min(calc(100vw - 24px), calc((100vh - 24px) * 1.3415)); height: auto; aspect-ratio: 1100 / 820;
     border-radius: 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
   }
+  .credit.visits { bottom: 42px; }
+  .credit b { color: var(--butter); font-weight: 700; }
   .credit {
     position: fixed; right: 14px; bottom: 10px; z-index: 5; margin: 0;
     font-size: 13px; font-weight: 500; color: #e6dcf2;
@@ -210,11 +212,8 @@
   /* ── 당첨 공개 ── */
   .reveal { position: fixed; inset: 0; background: rgba(30, 20, 52, .84); display: grid; place-items: center; z-index: 10; cursor: pointer; }
   .prize { text-align: center; color: #fff; }
-  .cap { position: relative; width: 240px; height: 240px; margin: 0 auto; }
-  .cap span { position: absolute; left: 0; width: 240px; height: 120px; }
-  .cap .top { top: 0; border-radius: 120px 120px 0 0; background: radial-gradient(120% 140% at 30% 20%, rgba(255,255,255,.55) 0, transparent 40%), var(--c); }
-  .cap .bot { bottom: 0; border-radius: 0 0 120px 120px; background: var(--c2); }
-  .tag { margin: -160px 0 0; font-family: var(--jua); font-size: 32px; color: #fff; opacity: 0; }
+  .cap { display: block; width: 240px; height: 255px; margin: 0 auto; }
+  .tag { margin: 4px 0 0; font-family: var(--jua); font-size: 32px; color: #fff; opacity: 0; }
   .who {
     margin: 0; font-family: var(--jua); font-size: clamp(80px, 13vw, 180px); line-height: 1.1;
     color: var(--butter); opacity: 0; transform: scale(.3);
@@ -235,8 +234,7 @@
     65% { transform: rotate(-13deg) scale(1.04); } 80% { transform: rotate(13deg) scale(1.08); }
     90% { transform: scale(1.1); }
   }
-  .reveal.open .cap .top { transition: transform .55s cubic-bezier(.2,.8,.3,1), opacity .55s; transform: translate(-70px, -180px) rotate(-35deg); opacity: 0; }
-  .reveal.open .cap .bot { transition: transform .55s cubic-bezier(.2,.8,.3,1), opacity .55s; transform: translate(70px, 180px) rotate(30deg); opacity: 0; }
+  .reveal.open .cap { transition: transform .5s cubic-bezier(.3,1.6,.5,1); transform: translateY(-14px) scale(1.12); }
   .reveal.open .tag { transition: opacity .3s .15s; opacity: 1; }
   .reveal.open .who { transition: transform .5s cubic-bezier(.3,1.6,.5,1), opacity .2s; opacity: 1; transform: scale(1); }
   .reveal.open .hint { transition: opacity .4s .7s; opacity: 1; }
@@ -257,7 +255,7 @@
     </div>
     <div class="glass"><canvas id="cv" aria-label="인형 뽑기 기계 안"></canvas><canvas id="rc" aria-label="달리기 경주" hidden></canvas></div>
     <div class="deck">
-      <button class="stick" id="shake" title="캡슐 흔들기"><span class="base"></span><span class="rod"></span><em>흔들기</em></button>
+      <button class="stick" id="shake" title="인형 흔들기"><span class="base"></span><span class="rod"></span><em>흔들기</em></button>
       <div class="screen" aria-live="polite">
         <span id="tries">준비 완료</span>
         <div class="gauge" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
@@ -273,7 +271,7 @@
       <button id="gameRace" aria-pressed="false">달리기</button>
     </div>
     <h2>뽑을 사람 넣기</h2>
-    <div class="seg" role="group" aria-label="캡슐 만드는 방법">
+    <div class="seg" role="group" aria-label="명단 만드는 방법">
       <button id="modeNum" aria-pressed="true">번호로</button>
       <button id="modeName" aria-pressed="false">이름으로</button>
     </div>
@@ -292,7 +290,7 @@
       <textarea id="names" spellcheck="false" placeholder="김하늘, 이바다, 박구름"></textarea>
     </label>
 
-    <button class="fill" id="apply">캡슐 채우기</button>
+    <button class="fill" id="apply">인형 채우기</button>
 
     <div id="luckBox" class="field">
       <h3>놓치는 정도</h3>
@@ -325,7 +323,7 @@
     </div>
 
     <div class="opts">
-      <label class="check"><input type="checkbox" id="removeWinner" checked> 뽑힌 캡슐은 빼기</label>
+      <label class="check"><input type="checkbox" id="removeWinner" checked> 뽑힌 사람은 빼기</label>
       <label class="check"><input type="checkbox" id="soundOn" checked> 효과음</label>
       <label class="check"><input type="checkbox" id="bgmOn" checked> 뽑는 동안 배경 음악</label>
     </div>
@@ -337,11 +335,36 @@
   </aside>
 </main>
 
+<p class="credit visits" id="visits" hidden>오늘 <b id="vToday">-</b>명, 전체 <b id="vTotal">-</b>명</p>
 <p class="credit">제작: 양산 황산초등학교 HR Yoon</p>
+<script>
+// 방문자 수: Abacus 카운터(무가입, CORS 허용). 브라우저당 하루 한 번만 세고, 내 컴퓨터(localhost, file://)에서는 보기만
+(function () {
+  var API = 'https://abacus.jasoncameron.dev', NS = 'hryoon0-claw-roulette';
+  var day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  var local = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  var mark = 'visited-' + day, counted = false;
+  try { counted = localStorage.getItem(mark) === '1'; } catch (e) {}
+  var op = (local || counted) ? 'get' : 'hit';
+  function req(key) {
+    var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 5000);
+    return fetch(API + '/' + op + '/' + NS + '/' + key, { signal: ctl.signal })
+      .then(function (r) { return r.ok ? r.json() : (r.status === 404 ? { value: 0 } : Promise.reject(r.status)); })
+      .finally(function () { clearTimeout(t); });
+  }
+  Promise.all([req('day-' + day), req('total')]).then(function (v) {
+    if (op === 'hit') { try { localStorage.setItem(mark, '1'); } catch (e) {} }   // 성공했을 때만 표시
+    var n = function (x) { return Number(x.value || 0).toLocaleString('ko-KR'); };
+    document.getElementById('vToday').textContent = n(v[0]);
+    document.getElementById('vTotal').textContent = n(v[1]);
+    document.getElementById('visits').hidden = false;
+  }).catch(function () { /* 장애, 요청 제한, 시간 초과면 조용히 숨김 */ });
+})();
+</script>
 
 <div class="reveal" id="reveal" hidden>
   <div class="prize">
-    <div class="cap"><span class="top"></span><span class="bot"></span></div>
+    <canvas class="cap" id="capCv" width="480" height="510" aria-hidden="true"></canvas>
     <p class="tag" id="tag">뽑혔어요!</p>
     <p class="who" id="who"></p>
     <div class="all" id="all" hidden></div>
@@ -445,7 +468,7 @@ function makeCapsule(item, i) {
   const x = PILE_L + colW * (i % cols + 0.5) + rand(-4, 4);
   const y = TOP_Y + 60 - Math.floor(i / cols) * (2 * R + 6);
   const b = Bodies.circle(x, y, R, { restitution: .25, friction: .08, frictionAir: .012, density: .002 });
-  b.plugin = { ...item, c: `hsl(${h} 78% 62%)`, c2: `hsl(${h} 80% 88%)`, rim: `hsl(${h} 55% 40% / .45)` };
+  b.plugin = { ...item, animal: ANIMALS[i % ANIMALS.length], c: `hsl(${h} 78% 62%)`, c2: `hsl(${h} 80% 88%)`, rim: `hsl(${h} 55% 40% / .45)` };
   return b;
 }
 
@@ -693,7 +716,7 @@ const HINT_CLOSE = '화면을 누르거나 스페이스를 누르면 닫혀요';
 function reveal(b) {
   const k = round.got.length + 1, last = k >= round.total, many = round.total > 1;
   showReveal(b, {
-    c: b.plugin.c, c2: b.plugin.c2, who: b.plugin.title,
+    c: b.plugin.c, c2: b.plugin.c2, who: b.plugin.title, pet: b,
     tag: many ? `${k}번째로 뽑혔어요!` : '뽑혔어요!',
     chips: last && many ? [...round.got, b].map((x, i) => chip('span', x, i + 1)) : [],
     hint: last ? HINT_CLOSE : '잠시 뒤 다음 친구를 뽑아요. 누르면 바로 넘어가요',
@@ -702,8 +725,27 @@ function reveal(b) {
 }
 
 // 당첨 공개 화면(인형 뽑기와 달리기가 함께 씀). token 은 closeReveal 이 받아 처리한다
-function showReveal(token, { c, c2, who, tag, chips, hint, autoNext }) {
+// 당첨 인형을 크게 그리고 배에 번호(그림이 없으면 색 동그라미)
+function drawPrize(pet) {
+  const cv2 = document.getElementById('capCv'), x = cv2.getContext('2d'), p = pet.plugin;
+  x.clearRect(0, 0, cv2.width, cv2.height);
+  const k = 1.5, im = sprite('plush-' + p.animal, p.c);
+  const cx = PLUSH.cx * k, cy = PLUSH.cy * k, r = PLUSH.r * k;
+  if (im) x.drawImage(im, 0, 0, PLUSH.w * k, PLUSH.h * k);
+  else {
+    x.fillStyle = p.c; x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill();
+    x.fillStyle = '#fff'; x.beginPath(); x.arc(cx, cy + r * PLUSH.bellyDy, r * PLUSH.belly, 0, 7); x.fill();
+  }
+  let fs = Math.round(r * (p.label.length <= 2 ? .72 : .5));
+  x.font = `${fs}px ${FONT}`;
+  while (fs > 12 && x.measureText(p.label).width > r * 1.02) { fs--; x.font = `${fs}px ${FONT}`; }
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#33244f';
+  x.fillText(p.label, cx, cy + r * PLUSH.bellyDy + 3);
+}
+
+function showReveal(token, { c, c2, who, tag, chips, hint, autoNext, pet }) {
   revealing = token;
+  if (pet) drawPrize(pet);
   const r = els.reveal, b = token;
   r.style.setProperty('--c', c);
   r.style.setProperty('--c2', c2);
@@ -789,14 +831,14 @@ function updateUI() {
   els.gameClaw.disabled = els.gameRace.disabled = busy;
   const n = pickCount(), word = game === 'race' ? '달려!' : '뽑기!';
   els.go.innerHTML = n > 1 ? `<small>${n}명</small>${word}` : word;
-  els.apply.textContent = game === 'race' ? '참가자 채우기' : '캡슐 채우기';
+  els.apply.textContent = game === 'race' ? '참가자 채우기' : '인형 채우기';
   els.nMinus.disabled = busy || n <= 1;
   els.nPlus.disabled = busy || n >= 30;
   els.pickN.disabled = busy;
   els.machine.classList.toggle('playing', busy);
   els.count.textContent = !capsules.length ? `아직 아무도 없어요. 위에서 «${els.apply.textContent}»를 눌러요.`
     : game === 'race' ? `달리기 참가자 ${Math.min(30, capsules.length)}명` + (capsules.length > 30 ? ` (${capsules.length}명 중 30명이 무작위로 달려요)` : '')
-    : `기계 안에 캡슐 ${capsules.length}개`;
+    : `기계 안에 인형 ${capsules.length}개`;
   els.emptyLog.hidden = els.log.children.length > 0;
 }
 
@@ -852,18 +894,55 @@ function drawChute() {
   ctx.fillText('출구', CHUTE_X, WALL_TOP + 47);
 }
 
+// ── Codex 로 그린 그림(인형 뽑기 인형, 달리기 캐릭터). 초록 자리(가면)에 참가자 색을 곱해 입힌다 ──
+// 픽셀을 읽지 않고 합성만 하므로 file:// 로 열어도(캔버스 오염) 문제없다. 색마다 한 번만 합성해 캐시
+const ANIMALS = ['bear', 'cat', 'bunny', 'chick', 'frog', 'pig'];
+const SPRITES = {};
+for (const n of [...ANIMALS.map(a => 'plush-' + a), 'kid-a', 'kid-b', 'kid-fall', 'swim-a', 'swim-b', 'swim-cough', 'plane']) {
+  const base = new Image(), mask = new Image();
+  base.src = `sprites/${n}.png`; mask.src = `sprites/${n}-mask.png`;
+  SPRITES[n] = { base, mask, cache: new Map() };
+}
+function sprite(n, color) {
+  const sp = SPRITES[n];
+  if (!sp || !sp.base.complete || !sp.mask.complete || !sp.base.naturalWidth || !sp.mask.naturalWidth) return null;
+  let out = sp.cache.get(color);
+  if (out) return out;
+  const w = sp.base.naturalWidth, h = sp.base.naturalHeight;
+  const tint = document.createElement('canvas'); tint.width = w; tint.height = h;
+  const t = tint.getContext('2d');
+  t.drawImage(sp.mask, 0, 0); t.globalCompositeOperation = 'source-in'; t.fillStyle = color; t.fillRect(0, 0, w, h);
+  out = document.createElement('canvas'); out.width = w; out.height = h;
+  const o = out.getContext('2d');
+  o.drawImage(sp.base, 0, 0);
+  o.globalCompositeOperation = 'multiply'; o.drawImage(tint, 0, 0);            // 회색 명암 × 참가자 색
+  o.globalCompositeOperation = 'destination-in'; o.drawImage(sp.base, 0, 0);   // 바깥은 다시 투명하게
+  sp.cache.set(color, out);
+  return out;
+}
+// 인형 그림(320x340): 몸통 원 중심 (160,180), 반지름 96. 하얀 배는 반지름의 0.55배, 중심보다 0.15배 아래
+const PLUSH = { w: 320, h: 340, cx: 160, cy: 180, r: 96, belly: .55, bellyDy: .15 };
+
 function fitFont(b) {
   if (b.plugin.fs) return b.plugin.fs;
   const label = b.plugin.label;
-  let fs = Math.round(R * (label.length <= 2 ? 0.95 : 0.66));
+  let fs = Math.round(R * (label.length <= 2 ? 0.72 : 0.5));   // 인형 배(지름 1.1R) 안에 들어가게
   ctx.font = `${fs}px ${FONT}`;
-  while (fs > 9 && ctx.measureText(label).width > R * 1.7) { fs--; ctx.font = `${fs}px ${FONT}`; }
+  while (fs > 9 && ctx.measureText(label).width > R * 1.02) { fs--; ctx.font = `${fs}px ${FONT}`; }
   if (document.fonts.check('20px Jua')) b.plugin.fs = fs;   // 주아체가 실린 뒤에만 기억
   return fs;
 }
 
 function drawCapsule(b) {
   const { x, y } = b.position, r = b.circleRadius, p = b.plugin;
+  const im = sprite('plush-' + p.animal, p.c);
+  if (im) {   // 동물 인형(그림이 안 실렸으면 아래 캡슐로 대신)
+    const k = r / PLUSH.r;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(b.angle);
+    ctx.drawImage(im, -PLUSH.cx * k, -PLUSH.cy * k, PLUSH.w * k, PLUSH.h * k);
+    ctx.restore();
+    return;
+  }
   ctx.save(); ctx.translate(x, y); ctx.rotate(b.angle);
   ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = p.c2; ctx.fill();
   ctx.beginPath(); ctx.arc(0, 0, r, Math.PI, 0); ctx.closePath(); ctx.fillStyle = p.c; ctx.fill();
@@ -879,9 +958,10 @@ function drawCapsule(b) {
   ctx.restore();
 }
 
-// 이름은 캡슐이 굴러도 늘 똑바로
+// 번호는 인형이 굴러도 늘 똑바로, 자리는 배 가운데(인형과 함께 돈다)
 function drawLabel(b) {
-  const { x, y } = b.position, p = b.plugin;
+  const p = b.plugin, d = b.circleRadius * PLUSH.bellyDy;
+  const x = b.position.x - Math.sin(b.angle) * d, y = b.position.y + Math.cos(b.angle) * d;
   const fs = fitFont(b);
   ctx.font = `${fs}px ${FONT}`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';

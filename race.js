@@ -142,7 +142,7 @@ function rShowResult() {
   race.state = 'result';
   const ws = rWinners(), many = ws.length > 1;
   showReveal({ race: true, winners: ws }, {
-    c: ws[0].plugin.c, c2: ws[0].plugin.c2, who: ws[0].plugin.title,
+    c: ws[0].plugin.c, c2: ws[0].plugin.c2, who: ws[0].plugin.title, pet: ws[0],
     tag: race.pick === 'last' ? '가장 늦게 들어왔어요!' : '1등으로 들어왔어요!',
     chips: many ? ws.map((b, i) => chip('span', b, i + 1)) : [],
     hint: HINT_CLOSE, autoNext: false,
@@ -228,31 +228,7 @@ function rCamera(t) {
   return { z, x, y };
 }
 
-// ── Codex 로 그린 캐릭터 그림: 초록 자리(가면)에 참가자 색을 곱해 입힌다 ──
-// 픽셀을 읽지 않고 합성만 하므로 file:// 로 열어도(캔버스 오염) 문제없다
-const SPRITES = {};
-for (const n of ['kid-a', 'kid-b', 'kid-fall', 'swim-a', 'swim-b', 'swim-cough', 'plane']) {
-  const base = new Image(), mask = new Image();
-  base.src = `sprites/${n}.png`; mask.src = `sprites/${n}-mask.png`;
-  SPRITES[n] = { base, mask, cache: new Map() };
-}
-function sprite(n, color) {
-  const sp = SPRITES[n];
-  if (!sp || !sp.base.complete || !sp.mask.complete || !sp.base.naturalWidth || !sp.mask.naturalWidth) return null;
-  let out = sp.cache.get(color);
-  if (out) return out;
-  const w = sp.base.naturalWidth, h = sp.base.naturalHeight;
-  const tint = document.createElement('canvas'); tint.width = w; tint.height = h;
-  const t = tint.getContext('2d');
-  t.drawImage(sp.mask, 0, 0); t.globalCompositeOperation = 'source-in'; t.fillStyle = color; t.fillRect(0, 0, w, h);
-  out = document.createElement('canvas'); out.width = w; out.height = h;
-  const o = out.getContext('2d');
-  o.drawImage(sp.base, 0, 0);
-  o.globalCompositeOperation = 'multiply'; o.drawImage(tint, 0, 0);       // 회색 명암 × 참가자 색
-  o.globalCompositeOperation = 'destination-in'; o.drawImage(sp.base, 0, 0);   // 바깥은 다시 투명하게
-  sp.cache.set(color, out);
-  return out;
-}
+// ── Codex 로 그린 캐릭터 그림(싣기와 색 입히기는 index.html 의 sprite()) ──
 // 그림 한 장을 원점 기준으로 그린다. w: 그릴 폭, ax/ay: 원점이 그림의 어디인지(0~1)
 function drawSprite(n, color, w, ax, ay) {
   const im = sprite(n, color);
