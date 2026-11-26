@@ -8,7 +8,8 @@
 const RW = 1100, RH = 820;
 const RMAX = 30;          // 한 경주에 달리는 최대 인원
 const RLEAD = 2.4;        // 준비, 차렷, 출발! 시간
-const RBASE = 19;         // 1등이 들어오는 시각(초)
+const RBASE = 28;         // 1등이 들어오는 시각(초)
+const RSCREENS = 3;       // 코스 길이(화면 몇 개)
 const rcv = document.getElementById('rc'), g = rcv.getContext('2d');
 rcv.width = RW * DPR; rcv.height = RH * DPR; g.setTransform(DPR, 0, 0, DPR, 0, 0);
 const RFONT = '"Jua", "Pretendard Variable", sans-serif';
@@ -49,7 +50,8 @@ const race = {
 // ── 준비: 명단으로 줄 세우기 ──
 function rLayout(n) {
   const TOP = n <= 12 ? 140 : 92, BOT = RH - 28, LANE = (BOT - TOP) / Math.max(n, 1);
-  return { n, TOP, BOT, LANE, START: 170, FIN: RW - 110, s: Math.max(.6, Math.min(1.35, LANE / 38)) };   // 캐릭터는 줄보다 조금 크게(살짝 겹쳐도 잘 보이게)
+  const START = 170, TRACK = (RW - 280) * RSCREENS;
+  return { n, TOP, BOT, LANE, START, TRACK, FIN: START + TRACK, s: Math.max(.6, Math.min(1.35, LANE / 38)) };   // 캐릭터는 줄보다 조금 크게(살짝 겹쳐도 잘 보이게)
 }
 
 function rPrepare() {
@@ -60,6 +62,7 @@ function rPrepare() {
   race.lay = rLayout(pool.length);
   race.src = capsules;
   race.clock = 0;
+  race.camX = 0;
 }
 
 // ── 경주 계획: 도착 순서 먼저, 그다음 스킬 섞인 달리기 ──
@@ -82,7 +85,7 @@ function rPlan() {
     } else if (last && r.rank === n - 2) {   // 끝에서 둘째도 막판에 붙잡혀 아슬아슬하게
       ev = [{ at: 2 + Math.random() * 8, s: pick(sk) }, { at: 13.5 + Math.random() * 2, s: pick(bad) }];
     } else {
-      ev = Array.from({ length: 2 + Math.floor(Math.random() * 2) }, () => ({ at: 1.5 + Math.random() * 14, s: pick(sk) }));
+      ev = Array.from({ length: 3 + Math.floor(Math.random() * 2) }, () => ({ at: 1.5 + Math.random() * 15, s: pick(sk) }));
     }
     ev.sort((a, b) => a.at - b.at);
     for (let j = 1; j < ev.length; j++) ev[j].at = Math.max(ev[j].at, ev[j - 1].at + ev[j - 1].s.dur + .5);
@@ -98,7 +101,7 @@ function rPlan() {
       track.push(Math.min(p, 1));
     }
     const tau = (track.length - 1) / 60;
-    const gap = r.rank === 0 ? 0 : r.rank === 1 ? .3 : .65 + (r.rank - 2) * .3;
+    const gap = r.rank === 0 ? 0 : r.rank === 1 ? .35 : .8 + (r.rank - 2) * .35;
     r.T = RBASE + gap; r.k = tau / r.T; r.track = track;
     r.ev = ev.map(e => ({ s: e.s, show: e.at / r.k, end: (e.at + e.s.dur) / r.k, done: false }));
   }
@@ -119,7 +122,7 @@ function raceStart() {
   if (!race.runners.length) return;
   round.total = Math.min(pickCount(), race.runners.length);
   rPlan();
-  Object.assign(race, { state: 'run', clock: 0, log: [], leader: null, rolled: false, went: false, leadSndAt: -9, skillSndAt: -9 });
+  Object.assign(race, { state: 'run', clock: 0, camX: 0, log: [], leader: null, rolled: false, went: false, leadSndAt: -9, skillSndAt: -9 });
   document.body.classList.add('stage');   // 달리는 동안 경주 화면만 창 가득
   sound.bgm('play');
   sound.roll(RLEAD - .3);
@@ -189,6 +192,14 @@ function rTick(dt) {
     if (race.leader && t - race.leadSndAt > .5 && !decided) { race.leadSndAt = t; sound.lead(); }
     race.leader = shown;
   }
+  // 카메라: 먼저 들어온 쪽이면 선두를 화면 70% 자리에, 늦게 들어온 쪽이면 꼴찌를 30% 자리에
+  {
+    const L = race.lay, pool = running.length ? running : rs;
+    const xs = pool.map(r => L.START + L.TRACK * Math.min(1, rPos(r, t)));
+    const tgt = last ? Math.min(...xs) - RW * .3 : Math.max(...xs) - RW * .7;
+    const goal = Math.max(0, Math.min(L.FIN + 110 - RW, tgt));
+    race.camX += (goal - race.camX) * Math.min(1, dt * 2.5);
+  }
   const lp = Math.min(1, rPos(now, t));
   const word = last ? '꼴찌' : (decided ? '1등' : '선두');
   showGauge(Math.max(1, Math.ceil(lp * 5)), `${word} ${shown.b.plugin.title}`);
@@ -212,7 +223,7 @@ function rCamera(t) {
   const fit = RH * .8 / (Math.abs(y1 - y2) + L.LANE * 3);
   const zMax = fit >= 1.7 ? Math.min(2.2, fit) : 1.9, fy = fit >= 1.7 ? (y1 + y2) / 2 : y1;
   const z = 1 + a * (zMax - 1);
-  const x = Math.max(0, Math.min(RW - RW / z, L.FIN - RW * .66 / z));
+  const x = Math.max(0, Math.min(RW - RW / z, (L.FIN - race.camX) - RW * .66 / z));
   const y = Math.max(0, Math.min(RH - RH / z, fy - RH * .55 / z));
   return { z, x, y };
 }
@@ -355,87 +366,111 @@ function rText(s, x, y, size, color, align = 'center', stroke) {
 }
 const laneY = (L, i) => L.TOP + L.LANE * (i + .5);
 
-// ── 배경 ──
-function bgField(L, tapeUp) {
-  let gr = g.createLinearGradient(0, 0, 0, L.TOP); gr.addColorStop(0, '#bfe6ff'); gr.addColorStop(1, '#eaf8ff');
-  g.fillStyle = gr; g.fillRect(0, 0, RW, L.TOP);
-  g.fillStyle = '#8fd07a'; g.beginPath(); g.moveTo(0, L.TOP - 26);
-  for (let x = 0; x <= RW; x += 60) g.quadraticCurveTo(x + 30, L.TOP - 46, x + 60, L.TOP - 26);
-  g.lineTo(RW, RH); g.lineTo(0, RH); g.fill();
-  for (const [y0, sag] of [[14, 24], [36, 16]]) {   // 만국기
-    g.strokeStyle = '#7a6a5a'; g.lineWidth = 1.5; g.beginPath();
-    for (let x = 0; x <= RW; x += 8) { const y = y0 + sag * Math.sin(Math.PI * x / RW); x ? g.lineTo(x, y) : g.moveTo(x, y); }
-    g.stroke();
-    for (let x = 12, k = 0; x < RW - 20; x += 30, k++) {
-      const y = y0 + sag * Math.sin(Math.PI * x / RW);
-      g.fillStyle = `hsl(${(k * 53) % 360} 80% 62%)`;
-      g.beginPath(); g.moveTo(x, y); g.lineTo(x + 22, y + 1); g.lineTo(x + 11, y + 18); g.fill();
-    }
+// ── 배경: 보이는 범위 [x0, x1](세상 좌표)만 그린다 ──
+// 위쪽 장식은 카메라 이동의 절반만큼 따라 옮겨, 화면에서는 절반 속도로 흐른다(시차로 깊이감)
+const MARKS = [.25, .5, .75];   // 25m, 50m, 75m 거리 표지
+function distanceMarks(L, x0, x1, color, signBg, signFg) {
+  for (const q of MARKS) {
+    const x = L.START + L.TRACK * q;
+    if (x < x0 - 60 || x > x1 + 60) continue;
+    g.strokeStyle = color; g.lineWidth = 3; g.setLineDash([10, 10]);
+    g.beginPath(); g.moveTo(x, L.TOP); g.lineTo(x, L.BOT); g.stroke(); g.setLineDash([]);
+    rRect(x - 34, L.TOP - 34, 68, 28, 8); g.fillStyle = signBg; g.fill();
+    g.strokeStyle = '#33244f'; g.lineWidth = 2; g.stroke();
+    rText(`${Math.round(q * 100)}m`, x, L.TOP - 19, 19, signFg);
   }
-  g.fillStyle = '#d8714b'; g.fillRect(0, L.TOP - 8, RW, L.BOT - L.TOP + 16);
+}
+function bunting(x0, x1, par, y0, sag, colors, step) {   // 기둥 사이 360마다 처지는 줄과 삼각 깃발
+  const off = race.camX * par;
+  g.strokeStyle = '#7a6a5a'; g.lineWidth = 1.5; g.beginPath();
+  const sx = Math.floor((x0 - off) / 8) * 8;
+  for (let x = sx; x <= x1 - off + 8; x += 8) { const y = y0 + sag * Math.sin(Math.PI * (((x % 360) + 360) % 360) / 360); x === sx ? g.moveTo(x + off, y) : g.lineTo(x + off, y); }
+  g.stroke();
+  const fx = Math.floor((x0 - off) / step) * step;
+  for (let x = fx, k = Math.round(fx / step); x < x1 - off + step; x += step, k++) {
+    const y = y0 + sag * Math.sin(Math.PI * (((x % 360) + 360) % 360) / 360);
+    g.fillStyle = colors(k);
+    g.beginPath(); g.moveTo(x + off, y); g.lineTo(x + off + step * .72, y + 1); g.lineTo(x + off + step * .36, y + 17); g.fill();
+  }
+}
+
+function bgField(L, tapeUp, x0, x1) {
+  const w = x1 - x0;
+  let gr = g.createLinearGradient(0, 0, 0, L.TOP); gr.addColorStop(0, '#bfe6ff'); gr.addColorStop(1, '#eaf8ff');
+  g.fillStyle = gr; g.fillRect(x0, 0, w, L.TOP);
+  const off = race.camX * .5, hs = Math.floor((x0 - off) / 60) * 60;   // 언덕(절반 속도)
+  g.fillStyle = '#8fd07a'; g.beginPath(); g.moveTo(hs + off, L.TOP - 26);
+  for (let x = hs; x <= x1 - off + 60; x += 60) g.quadraticCurveTo(x + off + 30, L.TOP - 46, x + off + 60, L.TOP - 26);
+  g.lineTo(x1 + 60, RH); g.lineTo(hs + off, RH); g.fill();
+  bunting(x0, x1, .5, 14, 24, k => `hsl(${(((k * 53) % 360) + 360) % 360} 80% 62%)`, 30);
+  bunting(x0, x1, .5, 36, 16, k => `hsl(${(((k * 97 + 40) % 360) + 360) % 360} 80% 62%)`, 30);
+  g.fillStyle = '#d8714b'; g.fillRect(x0, L.TOP - 8, w, L.BOT - L.TOP + 16);
   g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = L.n > 16 ? 1.2 : 2;
-  for (let k = 0; k <= L.n; k++) { g.beginPath(); g.moveTo(0, L.TOP + L.LANE * k); g.lineTo(RW, L.TOP + L.LANE * k); g.stroke(); }
+  for (let k = 0; k <= L.n; k++) { g.beginPath(); g.moveTo(x0, L.TOP + L.LANE * k); g.lineTo(x1, L.TOP + L.LANE * k); g.stroke(); }
   g.lineWidth = 4; g.beginPath(); g.moveTo(L.START, L.TOP); g.lineTo(L.START, L.BOT); g.stroke();
+  distanceMarks(L, x0, x1, 'rgba(255,255,255,.55)', '#ffffff', '#33244f');
   for (let y = L.TOP, k = 0; y < L.BOT; y += 12, k++) for (let c = 0; c < 2; c++) {
     g.fillStyle = (k + c) % 2 ? '#fff' : '#33244f'; g.fillRect(L.FIN + c * 12 - 12, y, 12, Math.min(12, L.BOT - y));
   }
   if (tapeUp) { g.strokeStyle = '#ff3d6e'; g.lineWidth = 3; g.beginPath(); g.moveTo(L.FIN + 14, L.TOP - 6); g.lineTo(L.FIN + 14, L.BOT + 6); g.stroke(); }
 }
 
-function bgSwim(L) {
-  const deck = '#e7f3f6', left = L.START - 44, right = L.FIN + 18;
-  g.fillStyle = deck; g.fillRect(0, 0, RW, RH);
+function bgSwim(L, x0, x1) {
+  const left = L.START - 44, right = L.FIN + 18, w = x1 - x0;
+  g.fillStyle = '#e7f3f6'; g.fillRect(x0, 0, w, RH);
   g.strokeStyle = 'rgba(110,165,185,.3)'; g.lineWidth = 1;   // 데크 타일
-  for (let x = 0; x < RW; x += 28) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, RH); g.stroke(); }
-  for (let y = 0; y < RH; y += 28) { g.beginPath(); g.moveTo(0, y); g.lineTo(RW, y); g.stroke(); }
-  // 배영 깃발 줄
-  g.strokeStyle = '#7a8a96'; g.lineWidth = 1.5; g.beginPath();
-  for (let x = 0; x <= RW; x += 8) { const y = 20 + 12 * Math.sin(Math.PI * x / RW); x ? g.lineTo(x, y) : g.moveTo(x, y); }
-  g.stroke();
-  for (let x = 10, k = 0; x < RW - 20; x += 28, k++) {
-    const y = 20 + 12 * Math.sin(Math.PI * x / RW);
-    g.fillStyle = ['#e63950', '#ffffff', '#2f6fd6'][k % 3];
-    g.beginPath(); g.moveTo(x, y); g.lineTo(x + 20, y + 1); g.lineTo(x + 10, y + 17); g.fill();
-  }
+  for (let x = Math.floor(x0 / 28) * 28; x < x1; x += 28) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, RH); g.stroke(); }
+  for (let y = 0; y < RH; y += 28) { g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); }
+  bunting(x0, x1, .5, 18, 12, k => ['#e63950', '#ffffff', '#2f6fd6'][((k % 3) + 3) % 3], 28);   // 배영 깃발
   // 물
-  const w = g.createLinearGradient(0, L.TOP, 0, L.BOT);
-  w.addColorStop(0, '#46bde4'); w.addColorStop(1, '#1d82c2');
-  g.fillStyle = w; g.fillRect(left, L.TOP - 8, right - left, L.BOT - L.TOP + 16);
-  g.strokeStyle = '#c9e3ea'; g.lineWidth = 6; g.strokeRect(left, L.TOP - 8, right - left, L.BOT - L.TOP + 16);
-  // 물결 반짝임(천천히 흐름)
-  const tt = performance.now() / 1000;
-  g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 2;
-  for (let k = 0; k < 22; k++) {
-    const x = left + ((k * 173 + tt * 18) % (right - left - 40)), y = L.TOP + 6 + (k * 61) % (L.BOT - L.TOP - 12);
-    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 9, y - 4, x + 18, y); g.quadraticCurveTo(x + 27, y + 4, x + 36, y); g.stroke();
+  const a = Math.max(left, x0), b = Math.min(right, x1);
+  if (b > a) {
+    const wg = g.createLinearGradient(0, L.TOP, 0, L.BOT); wg.addColorStop(0, '#46bde4'); wg.addColorStop(1, '#1d82c2');
+    g.fillStyle = wg; g.fillRect(a, L.TOP - 8, b - a, L.BOT - L.TOP + 16);
+    g.fillStyle = 'rgba(255,255,255,.07)';   // 레인 구분: 물 색을 옅게 번갈아
+    for (let k = 0; k < L.n; k += 2) g.fillRect(a, L.TOP + L.LANE * k, b - a, L.LANE);
+    const tt = performance.now() / 1000;   // 물결 반짝임
+    g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 2;
+    for (let k = 0; k < 80; k++) {
+      const x = left + ((k * 173 + tt * 18) % (right - left - 40)), y = L.TOP + 6 + (k * 61) % (L.BOT - L.TOP - 12);
+      if (x < x0 - 40 || x > x1) continue;
+      g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 9, y - 4, x + 18, y); g.quadraticCurveTo(x + 27, y + 4, x + 36, y); g.stroke();
+    }
+    g.fillStyle = 'rgba(12,45,100,.32)';   // 레인 바닥 가운데 줄과 끝의 T
+    for (let k = 0; k < L.n; k++) {
+      const y = laneY(L, k), hh = Math.max(2, L.LANE * .1);
+      g.fillRect(Math.max(a, left + 50), y - hh / 2, Math.min(b, right - 50) - Math.max(a, left + 50), hh);
+      g.fillRect(right - 54, y - L.LANE * .3, hh, L.LANE * .6);
+    }
+    g.strokeStyle = '#c9e3ea'; g.lineWidth = 6;
+    g.beginPath(); g.moveTo(a, L.TOP - 8); g.lineTo(b, L.TOP - 8); g.moveTo(a, L.BOT + 8); g.lineTo(b, L.BOT + 8); g.stroke();
   }
-  // 레인 구분: 줄 대신 물 색을 아주 옅게 번갈아 칠함(촘촘한 점 무늬는 눈이 아픔)
-  g.fillStyle = 'rgba(255,255,255,.07)';
-  for (let k = 0; k < L.n; k += 2) g.fillRect(left, L.TOP + L.LANE * k, right - left, L.LANE);
-  // 레인 바닥 가운데 줄과 끝의 T
-  g.fillStyle = 'rgba(12,45,100,.32)';
-  for (let k = 0; k < L.n; k++) {
-    const y = laneY(L, k), hh = Math.max(2, L.LANE * .1);
-    g.fillRect(left + 50, y - hh / 2, right - left - 100, hh);
-    g.fillRect(right - 54, y - L.LANE * .3, hh, L.LANE * .6);
-  }
-  // 출발대와 터치 패드
-  for (let k = 0; k < L.n; k++) {
+  distanceMarks(L, x0, x1, 'rgba(255,255,255,.4)', '#ffffff', '#1d82c2');
+  for (let k = 0; k < L.n; k++) {   // 출발대
     const y = laneY(L, k), hh = Math.min(26, L.LANE * .7);
     rRect(left - 26, y - hh / 2, 22, hh, 4); g.fillStyle = '#ffffff'; g.fill();
     g.strokeStyle = '#b9cdd5'; g.lineWidth = 1.5; g.stroke();
   }
-  g.fillStyle = '#ffd95a'; g.fillRect(right - 6, L.TOP - 8, 6, L.BOT - L.TOP + 16);
+  g.fillStyle = '#ffd95a'; g.fillRect(right - 6, L.TOP - 8, 6, L.BOT - L.TOP + 16);   // 터치 패드
 }
 
-function bgPlane(L) {
-  g.fillStyle = '#8b5e3c'; g.fillRect(0, 0, RW, RH);
-  g.fillStyle = '#2f5446'; g.fillRect(12, 12, RW - 24, RH - 24);
-  g.fillStyle = 'rgba(255,255,255,.04)';
-  for (let k = 0; k < 50; k++) g.fillRect((k * 211) % RW, (k * 97) % (RH - 60) + 14, 130, 2);
+const DOODLES = ['가자!', '쉬잉~', '화이팅', '날아라!', '슝~', '최고!'];   // 기호 대신 글자(윈도우에서 이모지로 바뀌지 않게)
+function bgPlane(L, x0, x1) {
+  const w = x1 - x0;
+  g.fillStyle = '#2f5446'; g.fillRect(x0, 0, w, RH);
+  g.fillStyle = '#8b5e3c'; g.fillRect(x0, 0, w, 12); g.fillRect(x0, RH - 12, w, 12);   // 칠판 틀
+  g.fillStyle = 'rgba(255,255,255,.04)';   // 분필 자국
+  for (let x = Math.floor(x0 / 300) * 300; x < x1; x += 300) for (let k = 0; k < 12; k++) g.fillRect(x + (k * 211) % 300, (k * 97) % (RH - 60) + 14, 130, 2);
+  // 칠판 낙서(절반 속도)
+  const off = race.camX * .5, ds = Math.floor((x0 - off) / 520) * 520;
+  for (let x = ds; x < x1 - off + 520; x += 520) {
+    const k = ((Math.round(x / 520) % DOODLES.length) + DOODLES.length) % DOODLES.length;
+    rText(DOODLES[k], x + off + 200, 52, 30, 'rgba(255,255,255,.55)');
+  }
   g.strokeStyle = 'rgba(255,255,255,.1)'; g.setLineDash([10, 12]); g.lineWidth = 1.5;
-  for (let k = 1; k < L.n; k++) { g.beginPath(); g.moveTo(30, L.TOP + L.LANE * k); g.lineTo(RW - 30, L.TOP + L.LANE * k); g.stroke(); }
+  for (let k = 1; k < L.n; k++) { g.beginPath(); g.moveTo(x0, L.TOP + L.LANE * k); g.lineTo(x1, L.TOP + L.LANE * k); g.stroke(); }
   g.setLineDash([]);
+  distanceMarks(L, x0, x1, 'rgba(255,255,255,.3)', 'rgba(255,255,255,.9)', '#2f5446');
   g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 3; g.setLineDash([4, 7]);
   g.beginPath(); g.moveTo(L.FIN, L.TOP - 6); g.lineTo(L.FIN, L.BOT); g.stroke(); g.setLineDash([]);
   rText('도착', L.FIN + 30, L.TOP - 16, 22, 'rgba(255,255,255,.85)');
@@ -524,20 +559,21 @@ function rDraw() {
   if (!L) return;
   const cam = rCamera(t);
   race.slow = cam.z > 1.3 ? .6 : 1;   // 확대 중에는 느리게
-  g.setTransform(DPR * cam.z, 0, 0, DPR * cam.z, -cam.x * cam.z * DPR, -cam.y * cam.z * DPR);
+  const vx = race.camX + cam.x, x0 = vx, x1 = vx + RW / cam.z;   // 보이는 세상 범위
+  g.setTransform(DPR * cam.z, 0, 0, DPR * cam.z, -vx * cam.z * DPR, -cam.y * cam.z * DPR);
   const planned = rs.length && rs[0].track;
   const first = planned ? rs.find(r => r.rank === 0) : null;
   const key = planned ? rs.find(r => r.rank === (race.pick === 'last' ? rs.length - 1 : 0)) : null;
-  if (race.theme === 'field') bgField(L, !first || t < first.T);
-  else if (race.theme === 'swim') bgSwim(L);
-  else bgPlane(L);
+  if (race.theme === 'field') bgField(L, !first || t < first.T, x0, x1);
+  else if (race.theme === 'swim') bgSwim(L, x0, x1);
+  else bgPlane(L, x0, x1);
 
   if (!rs.length) { rText('위에서 «참가자 채우기»를 눌러요', RW / 2, RH / 2, 34, '#fff', 'center', ['#33244f', 8]); return; }
 
   const tagH = Math.max(18, Math.min(40, L.LANE * .98)), tagF = Math.round(tagH * .78);   // 번호가 주인공: 레인 높이만큼
   const active = [];
   for (const r of rs) {
-    const p = rPos(r, t), x = L.START + (L.FIN - L.START) * p, y = laneY(L, r.lane);
+    const p = rPos(r, t), x = L.START + L.TRACK * p, y = laneY(L, r.lane);
     if (race.state !== 'idle') r.phase += (p - rPos(r, t - .05)) / .05 * 2.2;
     const e = r.ev.find(e => t >= e.show && t < e.end && race.state !== 'idle');
     g.save(); g.translate(x, y); g.scale(L.s, L.s);
@@ -572,7 +608,7 @@ function rDraw() {
   for (const [x, y, e] of active) {
     g.font = `${bf}px ${RFONT}`;
     const h = bf + 12, ir = h * .36, w = g.measureText(e.s.name).width + h * .5 + ir * 2 + 8;
-    const bx = Math.max(6, Math.min(RW - w - 6, x - w / 2)), by = y - L.LANE / 2 - h + 2;
+    const bx = Math.max(x0 + 6, Math.min(x1 - w - 6, x - w / 2)), by = y - L.LANE / 2 - h + 2;
     const age = t - e.show, pop = age < .2 ? 1 + (1 - age / .2) * .45 : 1;   // 처음 뜰 때 톡
     g.save(); g.translate(bx + w / 2, by + h / 2); g.scale(pop, pop); g.translate(-(bx + w / 2), -(by + h / 2));
     rRect(bx, by, w, h, h / 2); g.fillStyle = KIND_COLOR[e.s.kind]; g.fill();
@@ -582,6 +618,7 @@ function rDraw() {
     g.restore();
   }
   g.setTransform(DPR, 0, 0, DPR, 0, 0);   // 알림판과 출발 글씨는 확대하지 않는다
+  if (race.state !== 'idle' && planned) rEdgesAndMap(L, t, vx, cam);
   if (cam.z > 1.05) {   // 클로즈업 중 표시
     rRect(RW / 2 - 92, RH - 52, 184, 38, 19); g.fillStyle = 'rgba(30,22,50,.8)'; g.fill();
     rText('결승선 클로즈업', RW / 2, RH - 32, 22, '#ffd95a');
@@ -608,6 +645,40 @@ function rDraw() {
   if (race.state !== 'idle' && t < .6) {
     const s = t < -1.6 ? '준비' : t < -.8 ? '차렷' : t < 0 ? '…' : '출발!';
     rText(s, RW / 2, RH / 2, 96, '#ffd95a', 'center', ['#33244f', 12]);
+  }
+}
+
+// 화면 밖 주자는 가장자리에 «◀ 12» 꼬리표, 아래에는 코스 지도(전원 위치)
+function rEdgesAndMap(L, t, vx, cam) {
+  const rs = race.runners;
+  if (cam.z < 1.05) {
+    const h = Math.max(16, Math.min(28, L.LANE * .8)), f = Math.round(h * .66);
+    for (const r of rs) {
+      const sx = L.START + L.TRACK * rPos(r, t) - vx, y = laneY(L, r.lane);
+      if (sx > 70 && sx < RW + 10) continue;   // 왼쪽은 번호표가 잘리기 시작하면(약 70) 꼬리표를 띄운다
+      const left = sx <= 70, txt = r.b.plugin.label, tri = h * .42;   // 화살표는 세모를 직접 그림
+      g.font = `${f}px ${RFONT}`; const w = g.measureText(txt).width + h * .7 + tri;
+      const bx = left ? 6 : RW - 6 - w;
+      rRect(bx, y - h / 2, w, h, h / 2); g.fillStyle = r.b.plugin.c; g.fill();
+      g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
+      const tx = left ? bx + h * .3 : bx + w - h * .3;   // 세모 꼭짓점이 바깥(가장자리) 쪽을 가리킴
+      g.fillStyle = '#fff'; g.beginPath();
+      g.moveTo(tx, y); g.lineTo(tx + (left ? tri : -tri), y - tri * .7); g.lineTo(tx + (left ? tri : -tri), y + tri * .7); g.closePath(); g.fill();
+      rText(txt, bx + (left ? tri + h * .25 : 0) + (w - tri - h * .25) / 2 + (left ? 0 : h * .1), y + 1, f, '#fff', 'center', ['rgba(40,25,60,.6)', 3]);
+    }
+  }
+  // 코스 지도
+  const mx0 = 200, mx1 = RW - 200, my = RH - 14;
+  rRect(mx0 - 16, my - 11, mx1 - mx0 + 32, 22, 11); g.fillStyle = 'rgba(30,22,50,.8)'; g.fill();
+  const view0 = mx0 + (mx1 - mx0) * Math.max(0, (vx - L.START) / L.TRACK), view1 = mx0 + (mx1 - mx0) * Math.min(1, (vx + RW / cam.z - L.START) / L.TRACK);
+  rRect(view0, my - 9, Math.max(6, view1 - view0), 18, 6); g.fillStyle = 'rgba(255,255,255,.16)'; g.fill();   // 지금 보이는 곳
+  g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(mx0, my); g.lineTo(mx1, my); g.stroke();
+  for (const q of [0, ...MARKS, 1]) { const x = mx0 + (mx1 - mx0) * q; g.beginPath(); g.moveTo(x, my - 6); g.lineTo(x, my + 6); g.stroke(); }
+  for (const r of rs) {
+    const x = mx0 + (mx1 - mx0) * Math.min(1, rPos(r, t));
+    g.fillStyle = r.b.plugin.c; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(x, my, 5, 0, 7); g.fill(); g.stroke();
   }
 }
 
