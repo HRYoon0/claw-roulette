@@ -171,6 +171,7 @@ function rTick(dt) {
   for (const r of rs) for (const e of r.ev) {
     if (!e.done && t >= e.show) {
       e.done = true;
+      r.burst = { t: e.show, kind: e.s.kind };   // «펑» 효과용
       race.log.unshift({ text: `${r.b.plugin.title} ${e.s.name}`, kind: e.s.kind });
       race.log.length = Math.min(race.log.length, 2);
       if (t - race.skillSndAt > .35) { race.skillSndAt = t; sound.skill(e.s.kind); }
@@ -206,13 +207,143 @@ function rCamera(t) {
   const ease = u => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
   const a = ease((t - (key.T - 2.6)) / .7) * (1 - ease((t - (key.T + .9)) / .7));
   if (a <= .001) return none;
-  // 두 주자가 함께 들어오는 만큼만 키운다(최대 2.2배)
+  // 두 주자가 함께 들어오면 둘을 담는 만큼(최대 2.2배), 너무 멀어 1.7배도 안 되면 주인공만 따라가 1.9배
   const y1 = laneY(L, key.lane), y2 = laneY(L, rival.lane);
-  const zMax = Math.max(1, Math.min(2.2, RH * .8 / (Math.abs(y1 - y2) + L.LANE * 3)));
+  const fit = RH * .8 / (Math.abs(y1 - y2) + L.LANE * 3);
+  const zMax = fit >= 1.7 ? Math.min(2.2, fit) : 1.9, fy = fit >= 1.7 ? (y1 + y2) / 2 : y1;
   const z = 1 + a * (zMax - 1);
   const x = Math.max(0, Math.min(RW - RW / z, L.FIN - RW * .66 / z));
-  const y = Math.max(0, Math.min(RH - RH / z, (y1 + y2) / 2 - RH * .55 / z));
+  const y = Math.max(0, Math.min(RH - RH / z, fy - RH * .55 / z));
   return { z, x, y };
+}
+
+// ── Codex 로 그린 캐릭터 그림: 초록 자리(가면)에 참가자 색을 곱해 입힌다 ──
+// 픽셀을 읽지 않고 합성만 하므로 file:// 로 열어도(캔버스 오염) 문제없다
+const SPRITES = {};
+for (const n of ['kid-a', 'kid-b', 'kid-fall', 'swim-a', 'swim-b', 'swim-cough', 'plane']) {
+  const base = new Image(), mask = new Image();
+  base.src = `sprites/${n}.png`; mask.src = `sprites/${n}-mask.png`;
+  SPRITES[n] = { base, mask, cache: new Map() };
+}
+function sprite(n, color) {
+  const sp = SPRITES[n];
+  if (!sp || !sp.base.complete || !sp.mask.complete || !sp.base.naturalWidth || !sp.mask.naturalWidth) return null;
+  let out = sp.cache.get(color);
+  if (out) return out;
+  const w = sp.base.naturalWidth, h = sp.base.naturalHeight;
+  const tint = document.createElement('canvas'); tint.width = w; tint.height = h;
+  const t = tint.getContext('2d');
+  t.drawImage(sp.mask, 0, 0); t.globalCompositeOperation = 'source-in'; t.fillStyle = color; t.fillRect(0, 0, w, h);
+  out = document.createElement('canvas'); out.width = w; out.height = h;
+  const o = out.getContext('2d');
+  o.drawImage(sp.base, 0, 0);
+  o.globalCompositeOperation = 'multiply'; o.drawImage(tint, 0, 0);       // 회색 명암 × 참가자 색
+  o.globalCompositeOperation = 'destination-in'; o.drawImage(sp.base, 0, 0);   // 바깥은 다시 투명하게
+  sp.cache.set(color, out);
+  return out;
+}
+// 그림 한 장을 원점 기준으로 그린다. w: 그릴 폭, ax/ay: 원점이 그림의 어디인지(0~1)
+function drawSprite(n, color, w, ax, ay) {
+  const im = sprite(n, color);
+  if (!im) return false;
+  const h = w * im.height / im.width;
+  g.drawImage(im, -w * ax, -h * ay, w, h);
+  return true;
+}
+// 테마별 그림(그림이 없으면 false → 코드 그림으로 대신)
+function spriteRunner(theme, c, ph, e, t) {
+  const stop = e && e.s.kind === 'stop';
+  if (theme === 'field') {
+    if (e && e.s.fall) return drawSprite('kid-fall', c, 74, .5, .9);
+    const bob = stop ? 0 : -Math.abs(Math.sin(ph * 2.2)) * 3;
+    g.translate(0, bob);
+    const ok = drawSprite(stop || Math.sin(ph * 2.2) > 0 ? 'kid-a' : 'kid-b', c, 50, .5, .78);
+    if (ok && stop) { g.fillStyle = '#7fc8ff'; g.beginPath(); g.arc(20, -40, 4, 0, 7); g.fill(); }   // 땀방울
+    return ok;
+  }
+  if (theme === 'swim') {
+    if (e && e.s.cough) {
+      const ok = drawSprite('swim-cough', c, 80, .5, .55);
+      g.fillStyle = 'rgba(255,255,255,.9)';
+      for (let k = 0; k < 3; k++) { g.beginPath(); g.arc(26 + k * 6, -20 - ((t * 22 + k * 7) % 16), 3 + k * .7, 0, 7); g.fill(); }
+      return ok;
+    }
+    g.translate(0, Math.sin(ph) * 1.5);
+    return drawSprite(Math.sin(ph * 1.1) > 0 ? 'swim-a' : 'swim-b', c, 80, .5, .55);
+  }
+  let dy = 4 * Math.sin(ph * .45), rot = 0;
+  const prog = e ? Math.min(1, (t - e.show) / (e.end - e.show)) : 0;
+  if (e && e.s.dip) dy += 12 * Math.sin(Math.PI * prog);
+  if (e && e.s.loop) rot = -Math.PI * 2 * prog;
+  g.translate(0, dy); g.rotate(rot + (e && e.s.kind === 'back' ? .25 : 0));
+  return drawSprite('plane', c, 62, .5, .5);
+}
+
+// ── 스킬 효과: 터지는 순간의 «펑»과, 이어지는 동안의 꼬리·별·바람·화살표 ──
+function drawBurst(kind, age) {   // age: 터진 뒤 지난 초(0~.6)
+  const u = age / .6, col = KIND_COLOR[kind];
+  g.globalAlpha = 1 - u;
+  g.strokeStyle = col; g.lineWidth = 8 * (1 - u) + 2;
+  g.beginPath(); g.arc(0, -6, 16 + u * 52, 0, 7); g.stroke();
+  g.lineCap = 'round'; g.lineWidth = 4;
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4 + .3, r1 = 24 + u * 40, r2 = r1 + 14;
+    g.beginPath(); g.moveTo(Math.cos(a) * r1, -6 + Math.sin(a) * r1); g.lineTo(Math.cos(a) * r2, -6 + Math.sin(a) * r2); g.stroke();
+  }
+  g.globalAlpha = 1;
+}
+function drawAura(e, t) {   // 캐릭터 뒤에 깔리는 것
+  if (!e) return;
+  const col = KIND_COLOR[e.s.kind];
+  const gr = g.createRadialGradient(0, -6, 4, 0, -6, 46);
+  gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.globalAlpha = .55 + .2 * Math.sin(t * 12); g.fillStyle = gr; g.beginPath(); g.arc(0, -6, 46, 0, 7); g.fill(); g.globalAlpha = 1;
+  if (e.s.kind === 'dash') {   // 혜성 꼬리 + 속도선
+    const tail = g.createLinearGradient(-110, 0, -20, 0);
+    tail.addColorStop(0, 'rgba(255,217,90,0)'); tail.addColorStop(1, 'rgba(255,217,90,.85)');
+    g.fillStyle = tail; g.beginPath(); g.moveTo(-20, -22); g.lineTo(-110, -4); g.lineTo(-20, 12); g.closePath(); g.fill();
+    g.strokeStyle = '#fff'; g.lineWidth = 3.5; g.lineCap = 'round';
+    for (let k = 0; k < 4; k++) {
+      const yy = -20 + k * 10, off = (t * 260 + k * 37) % 40;
+      g.beginPath(); g.moveTo(-34 - off, yy); g.lineTo(-64 - off, yy); g.stroke();
+    }
+  }
+}
+function drawOverlay(e, t) {   // 캐릭터 앞에 얹히는 것
+  if (!e) return;
+  const k = e.s.kind;
+  if (k === 'stop') {   // 머리 위를 도는 별 셋
+    for (let i = 0; i < 3; i++) {
+      const a = t * 6 + i * 2.1, x = Math.cos(a) * 20, y = -48 + Math.sin(a) * 6;
+      g.fillStyle = '#ffd95a'; g.strokeStyle = '#33244f'; g.lineWidth = 1.5;
+      g.beginPath();
+      for (let j = 0; j < 10; j++) { const r = j % 2 ? 3.2 : 7.5, b = j * Math.PI / 5 - Math.PI / 2; g.lineTo(x + Math.cos(b) * r, y + Math.sin(b) * r); }
+      g.closePath(); g.fill(); g.stroke();
+    }
+  } else if (k === 'slow') {   // 앞에서 불어오는 맞바람 물결
+    g.strokeStyle = '#a8d8ff'; g.lineWidth = 3.5; g.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const x = 70 - ((t * 120 + i * 30) % 90), y = -26 + i * 14;
+      g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x - 10, y - 7, x - 20, y); g.quadraticCurveTo(x - 30, y + 7, x - 40, y); g.stroke();
+    }
+  } else if (k === 'back') {   // 뒤로 밀리는 화살표
+    g.fillStyle = '#ff6f91'; g.strokeStyle = '#fff'; g.lineWidth = 2;
+    for (let i = 0; i < 2; i++) {
+      const x = 46 - ((t * 140 + i * 40) % 80);
+      g.beginPath(); g.moveTo(x, -10); g.lineTo(x + 14, -22); g.lineTo(x + 14, -15); g.lineTo(x + 30, -15); g.lineTo(x + 30, -5);
+      g.lineTo(x + 14, -5); g.lineTo(x + 14, 2); g.closePath(); g.fill(); g.stroke();
+    }
+  }
+}
+function drawKindIcon(kind, cx, cy, r) {   // 말풍선 앞 동그라미 아이콘
+  g.fillStyle = '#33244f'; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill();
+  g.fillStyle = KIND_COLOR[kind]; g.strokeStyle = KIND_COLOR[kind]; g.lineWidth = r * .28; g.lineCap = 'round'; g.lineJoin = 'round';
+  const s = r / 10;
+  g.beginPath();
+  if (kind === 'dash') { g.moveTo(cx + 2 * s, cy - 7 * s); g.lineTo(cx - 4 * s, cy + 1 * s); g.lineTo(cx + 1 * s, cy + 1 * s); g.lineTo(cx - 2 * s, cy + 7 * s); g.lineTo(cx + 5 * s, cy - 1.5 * s); g.lineTo(cx, cy - 1.5 * s); g.closePath(); g.fill(); }
+  else if (kind === 'stop') { g.moveTo(cx, cy - 6 * s); g.lineTo(cx, cy + 1.5 * s); g.stroke(); g.beginPath(); g.arc(cx, cy + 5.5 * s, 1.4 * s, 0, 7); g.fill(); }
+  else if (kind === 'slow') { for (const dy of [-3.5, 3.5]) { g.moveTo(cx - 6 * s, cy + dy * s); g.quadraticCurveTo(cx - 3 * s, cy + (dy - 3) * s, cx, cy + dy * s); g.quadraticCurveTo(cx + 3 * s, cy + (dy + 3) * s, cx + 6 * s, cy + dy * s); } g.stroke(); }
+  else { g.moveTo(cx - 6 * s, cy); g.lineTo(cx + 6 * s, cy); g.moveTo(cx - 6 * s, cy); g.lineTo(cx - 1 * s, cy - 5 * s); g.moveTo(cx - 6 * s, cy); g.lineTo(cx - 1 * s, cy + 5 * s); g.stroke(); }
 }
 
 // ── 그리기 도움 ──
@@ -410,33 +541,45 @@ function rDraw() {
     if (race.state !== 'idle') r.phase += (p - rPos(r, t - .05)) / .05 * 2.2;
     const e = r.ev.find(e => t >= e.show && t < e.end && race.state !== 'idle');
     g.save(); g.translate(x, y); g.scale(L.s, L.s);
-    drawEffect(e);
-    if (race.theme === 'field') drawKid(r.b.plugin.c, r.phase, e);
-    else if (race.theme === 'swim') drawSwimmer(r.b.plugin.c, r.phase, e, t);
-    else drawPlane(r.b.plugin.c, r.phase, e, t);
+    drawAura(e, t);
+    g.save();
+    if (!spriteRunner(race.theme, r.b.plugin.c, r.phase, e, t)) {   // 그림이 없으면 코드 그림
+      g.restore(); g.save(); drawEffect(e);
+      if (race.theme === 'field') drawKid(r.b.plugin.c, r.phase, e);
+      else if (race.theme === 'swim') drawSwimmer(r.b.plugin.c, r.phase, e, t);
+      else drawPlane(r.b.plugin.c, r.phase, e, t);
+    }
+    g.restore();
+    drawOverlay(e, t);
+    if (r.burst && race.state !== 'idle' && t - r.burst.t >= 0 && t - r.burst.t < .6) drawBurst(r.burst.kind, t - r.burst.t);
     g.restore();
     // 번호(이름) 꼬리표: 주자 왼쪽
     g.font = `${tagF}px ${RFONT}`;
+    const back = (race.theme === 'swim' ? 42 : race.theme === 'plane' ? 34 : 28) * L.s;   // 캐릭터 뒤끝
     const label = r.b.plugin.label, tw = Math.max(tagH, g.measureText(label).width + tagH * .55);   // 짧은 번호는 동그라미
-    rRect(x - 30 * L.s - tw, y - tagH / 2, tw, tagH, tagH / 2); g.fillStyle = r.b.plugin.c; g.fill();
+    rRect(x - back - tw, y - tagH / 2, tw, tagH, tagH / 2); g.fillStyle = r.b.plugin.c; g.fill();
     g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
-    rText(label, x - 30 * L.s - tw / 2, y + 1, tagF, '#fff', 'center', ['rgba(40,25,60,.6)', 4]);
+    rText(label, x - back - tw / 2, y + 1, tagF, '#fff', 'center', ['rgba(40,25,60,.6)', 4]);
     if (planned && t >= r.T) {   // 들어온 순위
-      const rk = r.rank, w = tagH * 1.6;
-      rRect(x + 28 * L.s, y - tagH / 2, w, tagH, tagH / 2); g.fillStyle = rk < 3 ? MEDAL[rk] : 'rgba(255,255,255,.85)'; g.fill();
-      rText(`${rk + 1}등`, x + 28 * L.s + w / 2, y + 1, tagF, '#33244f');
+      const rk = r.rank, w = tagH * 1.6, front = (race.theme === 'swim' ? 42 : 30) * L.s;
+      rRect(x + front, y - tagH / 2, w, tagH, tagH / 2); g.fillStyle = rk < 3 ? MEDAL[rk] : 'rgba(255,255,255,.85)'; g.fill();
+      rText(`${rk + 1}등`, x + front + w / 2, y + 1, tagF, '#33244f');
     }
     if (e) active.push([x, y, e]);
   }
   // 스킬 말풍선
-  const bf = Math.max(13, Math.min(20, L.LANE * .6));
+  const bf = Math.max(15, Math.min(26, L.LANE * .75));
   for (const [x, y, e] of active) {
     g.font = `${bf}px ${RFONT}`;
-    const w = g.measureText(e.s.name).width + 16, h = bf + 10;
-    const bx = Math.min(RW - w - 6, x - w / 2), by = y - L.LANE / 2 - h + 4;
+    const h = bf + 12, ir = h * .36, w = g.measureText(e.s.name).width + h * .5 + ir * 2 + 8;
+    const bx = Math.max(6, Math.min(RW - w - 6, x - w / 2)), by = y - L.LANE / 2 - h + 2;
+    const age = t - e.show, pop = age < .2 ? 1 + (1 - age / .2) * .45 : 1;   // 처음 뜰 때 톡
+    g.save(); g.translate(bx + w / 2, by + h / 2); g.scale(pop, pop); g.translate(-(bx + w / 2), -(by + h / 2));
     rRect(bx, by, w, h, h / 2); g.fillStyle = KIND_COLOR[e.s.kind]; g.fill();
-    g.strokeStyle = 'rgba(51,36,79,.35)'; g.lineWidth = 1.5; g.stroke();
-    rText(e.s.name, bx + w / 2, by + h / 2 + 1, bf, '#33244f');
+    g.strokeStyle = '#33244f'; g.lineWidth = 2.5; g.stroke();
+    drawKindIcon(e.s.kind, bx + h * .25 + ir, by + h / 2, ir);
+    rText(e.s.name, bx + h * .25 + ir * 2 + 6, by + h / 2 + 1, bf, '#33244f', 'left');
+    g.restore();
   }
   g.setTransform(DPR, 0, 0, DPR, 0, 0);   // 알림판과 출발 글씨는 확대하지 않는다
   if (cam.z > 1.05) {   // 클로즈업 중 표시
